@@ -1,0 +1,10 @@
+.DS_Store
+.git
+.pytest_cache
+.playwright-cli
+.venv
+__pycache__
+*.py[cod]
+logs
+output
+.streamlit/uploaded_files
