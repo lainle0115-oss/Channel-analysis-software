@@ -22,6 +22,22 @@ FIXED_RETAIL_DATES = {
     (12, 25): "圣诞节",
 }
 
+PIPELINE_FIELDS = [
+    "Account / Company",
+    "Contact Person",
+    "Lead Source",
+    "Stage",
+    "Deal Size",
+    "Probability",
+    "Expected Close Date",
+    "Pain Point",
+    "Decision Maker",
+    "Next Step",
+    "Risk",
+    "Status Update",
+]
+PIPELINE_STAGE_ORDER = ["初步沟通", "技术交流", "测试", "报价", "谈判", "合同/采购", "成交", "流失"]
+
 COLUMN_LABELS = {
     "date": "日期",
     "week_start": "周开始日期",
@@ -273,6 +289,87 @@ def calendar_context(report_date: pd.Timestamp, context: dict[str, object] | Non
         "天气": _context_value(context, "weather_note"),
         "渠道活动": _context_value(context, "activity_note"),
     }
+
+
+def _pipeline_frame(context: dict[str, object] | None) -> pd.DataFrame:
+    records = (context or {}).get("pipeline_records", [])
+    if not isinstance(records, list) or not records:
+        return _empty_frame([*PIPELINE_FIELDS, "weighted_amount"])
+    frame = pd.DataFrame(records)
+    if "Contact" in frame.columns and "Contact Person" not in frame.columns:
+        frame["Contact Person"] = frame["Contact"]
+    for column in PIPELINE_FIELDS:
+        if column not in frame.columns:
+            frame[column] = ""
+    frame = frame[PIPELINE_FIELDS].copy()
+    frame["Deal Size"] = pd.to_numeric(frame["Deal Size"], errors="coerce").fillna(0.0)
+    probability = pd.to_numeric(frame["Probability"], errors="coerce").fillna(0.0)
+    if probability.max() > 1:
+        probability = probability / 100
+    frame["Probability"] = probability.clip(0, 1)
+    frame["Expected Close Date"] = pd.to_datetime(frame["Expected Close Date"], errors="coerce")
+    for column in ("Account / Company", "Contact Person", "Lead Source", "Stage", "Pain Point", "Decision Maker", "Next Step", "Risk", "Status Update"):
+        frame[column] = frame[column].fillna("").astype(str).str.strip()
+    frame["weighted_amount"] = frame["Deal Size"] * frame["Probability"]
+    return frame
+
+
+def _pipeline_summary(context: dict[str, object] | None, report_end: pd.Timestamp) -> dict[str, object]:
+    frame = _pipeline_frame(context)
+    if frame.empty:
+        return {
+            "frame": frame,
+            "open_frame": frame,
+            "open_count": 0,
+            "open_amount": 0.0,
+            "weighted_amount": 0.0,
+            "upcoming_count": 0,
+            "risk_count": 0,
+            "top_stage": "未维护",
+        }
+    open_frame = frame[~frame["Stage"].isin(["成交", "流失"])].copy()
+    close_dates = pd.to_datetime(open_frame["Expected Close Date"], errors="coerce")
+    upcoming = open_frame[
+        close_dates.between(pd.Timestamp(report_end).normalize(), pd.Timestamp(report_end).normalize() + pd.Timedelta(days=30))
+    ]
+    stage_totals = (
+        open_frame.groupby("Stage", as_index=False)["weighted_amount"]
+        .sum()
+        .sort_values("weighted_amount", ascending=False)
+    )
+    return {
+        "frame": frame,
+        "open_frame": open_frame,
+        "open_count": int(len(open_frame)),
+        "open_amount": float(open_frame["Deal Size"].sum()),
+        "weighted_amount": float(open_frame["weighted_amount"].sum()),
+        "upcoming_count": int(len(upcoming)),
+        "risk_count": int(open_frame["Risk"].astype(str).str.strip().ne("").sum()),
+        "top_stage": str(stage_totals.iloc[0]["Stage"]) if not stage_totals.empty else "未维护",
+    }
+
+
+def _pipeline_markdown_lines(context: dict[str, object] | None, report_end: pd.Timestamp) -> list[str]:
+    summary = _pipeline_summary(context, report_end)
+    open_frame = summary["open_frame"]
+    if open_frame.empty:
+        return ["- 当前未维护销售 Pipeline，建议补充客户公司、阶段、预计金额、成交概率和下一步动作。"]
+    lines = [
+        f"- 开放商机 {summary['open_count']} 个，预计订单金额 ¥{summary['open_amount']:,.0f}，加权预测金额 ¥{summary['weighted_amount']:,.0f}；金额最集中的阶段为 {summary['top_stage']}。",
+        f"- 未来 30 天内预计成交 {summary['upcoming_count']} 个，高风险项 {summary['risk_count']} 条；建议优先推进高概率、高金额且有明确下一步动作的客户。",
+    ]
+    priority = (
+        open_frame.sort_values(["weighted_amount", "Deal Size"], ascending=False)
+        .head(5)
+    )
+    for _, row in priority.iterrows():
+        close_date = row.get("Expected Close Date")
+        close_text = f"{pd.Timestamp(close_date):%Y-%m-%d}" if pd.notna(close_date) else "未定"
+        lines.append(
+            f"- {row.get('Account / Company')}｜{row.get('Stage')}：预计金额 ¥{float(row.get('Deal Size', 0)):,.0f}，"
+            f"成交概率 {float(row.get('Probability', 0)):.0%}，预计成交 {close_text}；下一步：{row.get('Next Step') or '待补充'}；风险：{row.get('Risk') or '无'}。"
+        )
+    return lines
 
 
 def _daily_channel(data: pd.DataFrame) -> pd.DataFrame:
@@ -831,8 +928,10 @@ def generate_period_report(
         f"- 覆盖渠道 {current['channel'].nunique()} 个，SKU {current['sku_id'].nunique()} 个，销量 {qty:,.0f} 件，采购 {purchase_qty:,.0f} 件，上一同期 {previous_qty:,.0f} 件，去年同期 {yoy_qty:,.0f} 件；{yoy_text}。",
         f"- 数据完整性：{coverage_text}",
         "",
-        "## 三、渠道表现与涨跌驱动",
+        "## 三、销售 Pipeline 分析",
     ]
+    lines.extend(_pipeline_markdown_lines(context, end))
+    lines.extend(["", "## 四、渠道表现与涨跌驱动"])
     for row in tables["channel"].itertuples(index=False):
         row_series = pd.Series(row._asdict())
         reason = _reason_for_channel(row_series, context_rows, comparison_label)
@@ -847,14 +946,14 @@ def generate_period_report(
             f"- **{row.channel}**：销量 {row.sales_qty:,.0f} 件{purchase_clause}，"
             f"{channel_comparison}，{channel_yoy}。{reason}"
         )
-    lines.extend(["", "## 四、SKU 贡献与机会"])
+    lines.extend(["", "## 五、SKU 贡献与机会"])
     for row in tables["sku"].head(10).itertuples(index=False):
         gap = getattr(row, "purchase_sales_gap", 0)
         lines.append(
             f"- {row.channel}｜{row.sku_name}：销量 {row.sales_qty:,.0f} 件，"
             f"采购 {row.purchase_qty:,.0f} 件，采销差 {gap:,.0f} 件，库存 {row.stock_qty:,.0f} 件。"
         )
-    lines.extend(["", "## 五、采销匹配分析"])
+    lines.extend(["", "## 六、采销匹配分析"])
     if purchase_qty:
         gap_table = tables["sku"].copy()
         gap_table["abs_gap"] = gap_table["purchase_sales_gap"].abs()
@@ -866,18 +965,18 @@ def generate_period_report(
             )
     else:
         lines.append("- 本期没有可用采购订单数据，暂不输出采销匹配判断。")
-    lines.extend(["", "## 六、库存风险与异常"])
+    lines.extend(["", "## 七、库存风险与异常"])
     if tables["anomalies"].empty:
         lines.append("- 当前未识别到明显库存或销量异常。")
     else:
         for row in tables["anomalies"].head(10).itertuples(index=False):
             lines.append(f"- {row.channel}｜{row.sku_name}｜{row.issue}：{row.action}")
-    lines.extend(["", "## 七、销量预测"])
+    lines.extend(["", "## 八、销量预测"])
     for row in tables["forecast"].itertuples(index=False):
         lines.append(f"- {row.channel}：当前累计 {row.sales_qty:,.0f} 件，完整周期预测 {row.forecast_qty:,.0f} 件。")
     lines.extend([
         "",
-        "## 八、行动跟进表",
+        "## 九、行动跟进表",
     ])
     if tables["actions"].empty:
         lines.append("- 当前没有需要跟进的异常事项。")
@@ -889,12 +988,12 @@ def generate_period_report(
             )
     lines.extend([
         "",
-        "## 九、外部因素与待验证假设",
+        "## 十、外部因素与待验证假设",
         f"- 天气：{context_rows['天气']}",
         f"- 节假日/特殊日期：{context_rows['节假日']}",
         f"- 渠道活动/价格/上架变化：{context_rows['渠道活动']}",
         "",
-        "## 十、复盘要求",
+        "## 十一、复盘要求",
         "1. 业务负责人填写行动跟进表中的负责人、处理状态和实际结果。",
         "2. 下一周期复核 P0/P1 事项是否改善销量、库存和履约。",
         "3. 补充缺失的销售额、天气和活动数据，提升下一周期归因准确度。",
@@ -1092,7 +1191,38 @@ def export_period_report_docx(
     for item in summary_items:
         _add_bullet(doc, item)
 
-    _add_section_heading(doc, "二、渠道表现")
+    _add_section_heading(doc, "二、销售 Pipeline")
+    pipeline_summary = _pipeline_summary(context, end)
+    pipeline_open = pipeline_summary["open_frame"]
+    if pipeline_open.empty:
+        _add_bullet(doc, "当前未维护销售 Pipeline，建议补充客户公司、阶段、预计金额、成交概率和下一步动作。")
+    else:
+        pipeline_kpis = [
+            ["开放商机", f"{pipeline_summary['open_count']:,} 个", "预计订单金额", f"¥{pipeline_summary['open_amount']:,.0f}"],
+            ["加权预测金额", f"¥{pipeline_summary['weighted_amount']:,.0f}", "金额集中阶段", str(pipeline_summary["top_stage"])],
+            ["30天内预计成交", f"{pipeline_summary['upcoming_count']:,} 个", "高风险项", f"{pipeline_summary['risk_count']:,} 条"],
+        ]
+        _add_table(doc, ["指标", "结果", "指标", "结果"], pipeline_kpis)
+        pipeline_rows = []
+        for _, row in (
+            pipeline_open.sort_values(["weighted_amount", "Deal Size"], ascending=False)
+            .head(6)
+            .iterrows()
+        ):
+            close_date = row.get("Expected Close Date")
+            close_text = f"{pd.Timestamp(close_date):%Y-%m-%d}" if pd.notna(close_date) else "未定"
+            pipeline_rows.append([
+                _trim_text(str(row.get("Account / Company", "")), 18),
+                str(row.get("Stage", "")),
+                f"¥{float(row.get('Deal Size', 0)):,.0f}",
+                f"{float(row.get('Probability', 0)):.0%}",
+                close_text,
+                _trim_text(str(row.get("Next Step", "")), 28),
+                _trim_text(str(row.get("Risk", "")), 22),
+            ])
+        _add_table(doc, ["客户", "阶段", "预计金额", "概率", "预计成交", "下一步", "风险"], pipeline_rows)
+
+    _add_section_heading(doc, "三、渠道表现")
     channel_rows = []
     for row in tables["channel"].head(8).itertuples(index=False):
         channel_rows.append([
@@ -1107,7 +1237,7 @@ def export_period_report_docx(
         ])
     _add_table(doc, ["渠道", "销量", "采购量", "采销比", "销售额", "环比", "同比", "有效天数"], channel_rows)
 
-    _add_section_heading(doc, "三、TOP SKU")
+    _add_section_heading(doc, "四、TOP SKU")
     sku_rows = []
     for row in tables["sku"].head(8).itertuples(index=False):
         sku_rows.append([
@@ -1121,7 +1251,7 @@ def export_period_report_docx(
         ])
     _add_table(doc, ["渠道", "商品", "销量", "采购量", "采销差", "销售额", "最新库存"], sku_rows)
 
-    _add_section_heading(doc, "四、采销匹配")
+    _add_section_heading(doc, "五、采销匹配")
     if purchase_qty:
         gap_rows = []
         gap_table = tables["sku"].copy()
@@ -1140,7 +1270,7 @@ def export_period_report_docx(
     else:
         _add_bullet(doc, "本期没有可用采购订单数据，暂不输出采销匹配判断。")
 
-    _add_section_heading(doc, "五、行动跟进")
+    _add_section_heading(doc, "六、行动跟进")
     action_rows = []
     for row in tables["actions"].head(8).itertuples(index=False):
         action_rows.append([
@@ -1153,7 +1283,7 @@ def export_period_report_docx(
         ])
     _add_table(doc, ["优先级", "渠道", "商品", "问题", "建议动作", "截止"], action_rows)
 
-    _add_section_heading(doc, "六、口径说明")
+    _add_section_heading(doc, "七、口径说明")
     notes = [
         f"当前周期：{start:%Y-%m-%d} 至 {end:%Y-%m-%d}；上一同期：{previous_start:%Y-%m-%d} 至 {previous_end:%Y-%m-%d}；去年同期：{yoy_start:%Y-%m-%d} 至 {yoy_end:%Y-%m-%d}。",
         "库存使用渠道 + SKU 的最新快照口径，不跨日期累加。",

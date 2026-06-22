@@ -67,6 +67,9 @@ st.markdown(
         --sidebar-pill-border: rgba(111, 88, 247, .26);
         --sidebar-pill-shadow: 0 10px 24px rgba(87, 80, 238, .10), inset 0 1px 0 rgba(255,255,255,.88);
         --sidebar-pill-hover: rgba(111, 88, 247, .10);
+        --sidebar-control-height: 3.05rem;
+        --button-1-gradient: linear-gradient(115deg, #9f6dff 0%, #6f3cff 44%, #1378ff 100%);
+        --button-1-shadow: 0 18px 38px rgba(90, 69, 245, .28), inset 0 1px 0 rgba(255,255,255,.46);
         --amber: #d8911c;
         --red: #c84b4b;
         --blue-soft: #edf5f2;
@@ -114,7 +117,37 @@ st.markdown(
         margin: 0 !important;
     }
     [data-testid="stSidebar"] * { color: var(--ink); }
-    [data-testid="stSidebar"] h1 { font-size: 1.05rem; color: var(--teal-dark); }
+    @keyframes sidebarButtonShine {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
+    [data-testid="stSidebar"] h1 {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        min-height: var(--sidebar-control-height) !important;
+        width: 100% !important;
+        margin: .08rem 0 .9rem !important;
+        padding: .62rem 1rem !important;
+        border-radius: 999px !important;
+        border: 1px solid rgba(255,255,255,.52) !important;
+        background:
+            radial-gradient(circle at 20% 8%, rgba(255,255,255,.64), transparent 30%),
+            var(--button-1-gradient) !important;
+        background-size: 190% 190% !important;
+        color: #ffffff !important;
+        font-size: .98rem !important;
+        font-weight: 900 !important;
+        letter-spacing: -.02em !important;
+        text-align: center !important;
+        box-shadow: var(--button-1-shadow) !important;
+        animation: sidebarButtonShine 8s ease infinite;
+    }
+    [data-testid="stSidebar"] h1 * {
+        color: #ffffff !important;
+        text-align: center !important;
+    }
     [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 { font-size: .92rem; }
     [data-testid="stSidebar"] .stCaption { font-size: .72rem; line-height: 1.45; }
     .sidebar-top-fill {
@@ -149,7 +182,8 @@ st.markdown(
     }
     [data-testid="stSidebarCollapseButton"],
     [data-testid="stSidebarCollapsedControl"],
-    [data-testid="collapsedControl"] {
+    [data-testid="collapsedControl"],
+    [data-testid="stExpandSidebarButton"] {
         visibility: visible !important;
         opacity: 1 !important;
         pointer-events: auto !important;
@@ -211,7 +245,8 @@ st.markdown(
         pointer-events: auto !important;
     }
     [data-testid="stSidebarCollapsedControl"] button,
-    [data-testid="collapsedControl"] button {
+    [data-testid="collapsedControl"] button,
+    [data-testid="stExpandSidebarButton"] {
         display: flex !important;
         visibility: visible !important;
         opacity: 1 !important;
@@ -226,7 +261,8 @@ st.markdown(
         backdrop-filter: saturate(180%) blur(18px) !important;
     }
     [data-testid="stSidebarCollapsedControl"] button:before,
-    [data-testid="collapsedControl"] button:before {
+    [data-testid="collapsedControl"] button:before,
+    [data-testid="stExpandSidebarButton"]:before {
         content: "›";
         display: block;
         color: #1d1d1f;
@@ -236,7 +272,8 @@ st.markdown(
         transform: translateY(-1px);
     }
     [data-testid="stSidebarCollapsedControl"] button svg,
-    [data-testid="collapsedControl"] button svg {
+    [data-testid="collapsedControl"] button svg,
+    [data-testid="stExpandSidebarButton"] svg {
         color: #1d1d1f !important;
         width: 18px !important;
         height: 18px !important;
@@ -270,8 +307,8 @@ st.markdown(
         color: #4f38e8 !important;
         border: 1px solid var(--sidebar-pill-border) !important;
         border-radius: 999px !important;
-        min-width: 6.6rem;
-        min-height: 2.55rem;
+        min-width: 7.6rem;
+        min-height: var(--sidebar-control-height);
         padding: .58rem 1rem !important;
         white-space: nowrap;
         line-height: 1 !important;
@@ -459,6 +496,90 @@ st.markdown(
     .saved-file-row span {
         color: var(--muted) !important;
         font-size: .72rem;
+    }
+    .sidebar-nav-title {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: var(--sidebar-control-height);
+        width: 100%;
+        margin: 1.05rem 0 .72rem;
+        padding: .62rem 1rem;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,.52);
+        background:
+            radial-gradient(circle at 20% 8%, rgba(255,255,255,.64), transparent 30%),
+            var(--button-1-gradient);
+        background-size: 190% 190%;
+        box-shadow: var(--button-1-shadow);
+        font-weight: 900;
+        color: #ffffff;
+        letter-spacing: -.01em;
+        text-align: center;
+        animation: sidebarButtonShine 8s ease infinite;
+    }
+    [data-testid="stSidebar"] [data-testid="stRadio"] {
+        margin-bottom: .85rem;
+    }
+    [data-testid="stSidebar"] [data-testid="stRadio"] > label,
+    [data-testid="stSidebar"] [data-testid="stRadio"] [data-testid="stWidgetLabel"] {
+        display: none !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] {
+        display: grid !important;
+        grid-template-columns: 1fr;
+        gap: .45rem;
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] > div {
+        width: 100% !important;
+        max-width: 100% !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stRadio"] label {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+        margin: 0 !important;
+        min-height: var(--sidebar-control-height) !important;
+        padding: .48rem .8rem !important;
+        border-radius: 999px !important;
+        border: 1px solid var(--sidebar-pill-border) !important;
+        background:
+            radial-gradient(circle at 18% 0%, rgba(255,255,255,.78), transparent 36%),
+            linear-gradient(180deg, rgba(255,255,255,.32), rgba(255,255,255,.12)),
+            var(--sidebar-pill-bg) !important;
+        box-shadow: var(--sidebar-pill-shadow) !important;
+        cursor: pointer !important;
+        transition: transform .16s ease, box-shadow .16s ease, background .16s ease;
+    }
+    [data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
+        transform: translateY(-1px);
+        background:
+            radial-gradient(circle at 18% 0%, rgba(255,255,255,.82), transparent 36%),
+            linear-gradient(180deg, rgba(255,255,255,.36), rgba(255,255,255,.16)),
+            var(--sidebar-pill-hover) !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) {
+        background: #fff !important;
+        border-color: rgba(111, 88, 247, .42) !important;
+        box-shadow: 0 18px 34px rgba(87, 80, 238, .18), inset 0 1px 0 rgba(255,255,255,.96) !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stRadio"] label p,
+    [data-testid="stSidebar"] [data-testid="stRadio"] label span {
+        color: #5f636f !important;
+        font-weight: 850 !important;
+        text-align: center !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) p,
+    [data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) span {
+        color: #4f38e8 !important;
+    }
+    [data-testid="stSidebar"] [data-testid="stRadio"] label > div:first-child {
+        display: none !important;
     }
     .business-topbar {
         display: flex !important;
@@ -723,6 +844,67 @@ st.markdown(
         overflow: hidden;
         text-overflow: ellipsis;
     }
+    .pipeline-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: .8rem;
+        margin: .35rem 0 1rem;
+    }
+    .pipeline-card {
+        padding: .95rem 1rem;
+        border-radius: 18px;
+        border: 1px solid rgba(211,215,226,.78);
+        background: linear-gradient(180deg, rgba(255,255,255,.95), rgba(255,255,255,.82));
+        box-shadow: 0 12px 26px rgba(29,29,31,.06), inset 0 1px 0 rgba(255,255,255,.92);
+    }
+    .pipeline-card .label {
+        color: var(--muted);
+        font-size: .74rem;
+        font-weight: 850;
+    }
+    .pipeline-card .value {
+        margin-top: .28rem;
+        color: var(--ink);
+        font-size: 1.55rem;
+        line-height: 1;
+        font-weight: 950;
+        letter-spacing: -.03em;
+    }
+    .pipeline-card .hint {
+        margin-top: .34rem;
+        color: var(--muted);
+        font-size: .72rem;
+    }
+    .pipeline-field-table {
+        border: 1px solid rgba(211,215,226,.82);
+        border-radius: 18px;
+        overflow: hidden;
+        background: #fff;
+        box-shadow: 0 10px 24px rgba(29,29,31,.05);
+    }
+    .pipeline-field-row {
+        display: grid;
+        grid-template-columns: 1.05fr .95fr;
+        gap: 0;
+        border-bottom: 1px solid rgba(229,229,231,.9);
+    }
+    .pipeline-field-row:last-child { border-bottom: 0; }
+    .pipeline-field-row div {
+        padding: .68rem .85rem;
+        font-weight: 760;
+    }
+    .pipeline-field-row small {
+        display: block;
+        margin-top: .2rem;
+        color: var(--muted);
+        font-size: .68rem;
+        line-height: 1.35;
+        font-weight: 650;
+    }
+    .pipeline-field-row div:nth-child(2) {
+        color: var(--muted);
+        border-left: 1px solid rgba(229,229,231,.9);
+    }
     .report-panel {
         background: var(--panel);
         border: 1px solid var(--line);
@@ -909,7 +1091,8 @@ st.markdown(
     [data-testid="stButtonGroup"] button[data-testid="stBaseButton-segmented_controlActive"] span {
         color: #3f32d6 !important;
     }
-    [data-testid="stRadio"] label, [data-testid="stRadio"] label * { color: var(--ink) !important; }
+    [data-testid="stMain"] [data-testid="stRadio"] label,
+    [data-testid="stMain"] [data-testid="stRadio"] label * { color: var(--ink) !important; }
     [data-testid="stToggle"] label, [data-testid="stToggle"] label * { color: var(--ink) !important; }
     [data-testid="stDataFrame"] { background: #ffffff; border: 1px solid var(--line); border-radius: 10px; overflow: hidden; }
     div.stButton > button,
@@ -998,7 +1181,8 @@ st.markdown(
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
-        min-height: 2.5rem !important;
+        width: 100% !important;
+        min-height: var(--sidebar-control-height) !important;
         border-radius: 999px !important;
         background:
             radial-gradient(circle at 18% 0%, rgba(255,255,255,.78), transparent 36%),
@@ -1035,7 +1219,7 @@ st.markdown(
         transform: translateY(-1px);
     }
     [data-testid="stSidebar"] div.stButton > button:has(p:only-child) {
-        min-height: 2.5rem !important;
+        min-height: var(--sidebar-control-height) !important;
         padding: .48rem .74rem !important;
     }
     [data-testid="stSidebar"] div.stButton > button:has(p:only-child) p {
@@ -1052,7 +1236,7 @@ st.markdown(
         align-items: center !important;
         justify-content: center !important;
         text-align: center !important;
-        min-height: 2.5rem !important;
+        min-height: var(--sidebar-control-height) !important;
         min-width: 2rem !important;
         padding: .48rem .68rem !important;
         border-radius: 999px !important;
@@ -1146,16 +1330,265 @@ st.markdown(
     h2 { font-size: 1.12rem !important; }
     h3 { font-size: .98rem !important; }
     @media (max-width: 720px) {
-        .block-container { padding: 5.1rem .7rem 2rem; }
+        html, body, .stApp {
+            overflow-x: hidden !important;
+        }
+        .block-container {
+            padding: 4.85rem .72rem 2rem !important;
+            max-width: 100vw !important;
+        }
+        section[data-testid="stSidebar"],
+        [data-testid="stSidebar"] {
+            min-width: min(86vw, 320px) !important;
+            max-width: min(86vw, 320px) !important;
+            width: min(86vw, 320px) !important;
+            transform: none !important;
+            translate: none !important;
+            left: 0 !important;
+            border-right: 1px solid rgba(229,229,231,.94) !important;
+            box-shadow: 18px 0 42px rgba(18, 24, 38, .16) !important;
+        }
+        section[data-testid="stSidebar"][aria-expanded="false"],
+        [data-testid="stSidebar"][aria-expanded="false"],
+        section[data-testid="stSidebar"].stSidebar[aria-expanded="false"] {
+            transform: none !important;
+            translate: none !important;
+            left: 0 !important;
+            margin-left: 0 !important;
+        }
         [data-testid="stSidebar"] { background-size: 100% 64px !important; }
-        [data-testid="stSidebarContent"] { padding-top: 3.75rem; }
+        [data-testid="stSidebarContent"] {
+            padding-top: 3.55rem !important;
+            padding-left: .72rem !important;
+            padding-right: .72rem !important;
+        }
         .stApp:before { height: 64px; }
         .sidebar-top-fill { height: 64px; }
-        .business-topbar { left: 0 !important; height: 64px !important; min-height: 64px !important; padding: 0 .75rem !important; }
-        .business-brand { margin-left: 0 !important; }
+        [data-testid="stSidebarCollapseButton"],
+        [data-testid="stSidebarCollapsedControl"],
+        [data-testid="collapsedControl"],
+        [data-testid="stExpandSidebarButton"] {
+            z-index: 1000006 !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stBaseButton-headerNoPadding"],
+        [data-testid="stSidebarCollapseButton"] [data-testid="stBaseButton-headerNoPadding"],
+        [data-testid="stHeader"] [data-testid="stBaseButton-headerNoPadding"]:not([data-testid="stMainMenuButton"]),
+        [data-testid="stSidebarCollapsedControl"] button,
+        [data-testid="collapsedControl"] button,
+        [data-testid="stExpandSidebarButton"] {
+            display: flex !important;
+            visibility: visible !important;
+            opacity: 1 !important;
+            top: 76px !important;
+            left: 14px !important;
+            width: 42px !important;
+            height: 42px !important;
+            min-width: 42px !important;
+            min-height: 42px !important;
+            align-items: center !important;
+            justify-content: center !important;
+            padding: 0 !important;
+            overflow: visible !important;
+            border-radius: 999px !important;
+            background: rgba(255,255,255,.98) !important;
+            border: 1px solid rgba(211, 215, 226, .95) !important;
+            color: #1d1d1f !important;
+            box-shadow: 0 14px 34px rgba(20, 24, 36, .24), 0 0 0 5px rgba(101, 88, 247, .10) !important;
+            z-index: 1000006 !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stBaseButton-headerNoPadding"]:before,
+        [data-testid="stSidebarCollapseButton"] [data-testid="stBaseButton-headerNoPadding"]:before,
+        [data-testid="stHeader"] [data-testid="stBaseButton-headerNoPadding"]:not([data-testid="stMainMenuButton"]):before,
+        [data-testid="stSidebarCollapsedControl"] button:before,
+        [data-testid="collapsedControl"] button:before,
+        [data-testid="stExpandSidebarButton"]:before {
+            display: flex !important;
+            align-items: center !important;
+            justify-content: center !important;
+            width: 100% !important;
+            height: 100% !important;
+            font-size: 26px !important;
+            line-height: 1 !important;
+            font-weight: 850 !important;
+            color: #1d1d1f !important;
+            transform: translateY(-1px) !important;
+        }
+        [data-testid="stSidebar"][aria-expanded="true"] [data-testid="stBaseButton-headerNoPadding"],
+        [data-testid="stSidebarCollapseButton"] [data-testid="stBaseButton-headerNoPadding"] {
+            left: calc(min(86vw, 320px) - 19px) !important;
+        }
+        [data-testid="stSidebarCollapsedControl"] {
+            top: 76px !important;
+            left: 14px !important;
+            z-index: 1000006 !important;
+        }
+        [data-testid="stExpandSidebarButton"] {
+            position: fixed !important;
+            pointer-events: auto !important;
+        }
+        .business-topbar {
+            left: 0 !important;
+            height: 64px !important;
+            min-height: 64px !important;
+            padding: 0 .72rem 0 3.75rem !important;
+            gap: .5rem !important;
+            z-index: 1000003 !important;
+        }
+        .business-brand {
+            margin-left: 0 !important;
+            gap: .45rem !important;
+            min-width: 0 !important;
+        }
+        .business-brand-mark {
+            width: 28px !important;
+            height: 28px !important;
+            border-radius: 8px !important;
+            font-size: .76rem !important;
+        }
+        .business-brand > span:not(.business-brand-mark) {
+            max-width: 42vw !important;
+            overflow: hidden !important;
+            text-overflow: ellipsis !important;
+            white-space: nowrap !important;
+            font-size: .88rem !important;
+        }
+        .business-brand small { display: none !important; }
         .business-meta { display: none; }
-        .hero { grid-template-columns: 1fr; }
+        .hero {
+            grid-template-columns: 1fr !important;
+            gap: .65rem !important;
+            padding: .85rem .9rem !important;
+            border-radius: 16px !important;
+            margin-bottom: .65rem !important;
+        }
+        .hero h1 {
+            font-size: 1.22rem !important;
+            line-height: 1.25 !important;
+        }
         .hero p { padding: .55rem 0 0; border-left: 0; border-top: 1px solid var(--line); }
+        .diagnostic-panel,
+        .section-note,
+        .channel-card,
+        [data-testid="stMetric"] {
+            border-radius: 16px !important;
+        }
+        .trend-summary-grid {
+            grid-template-columns: 1fr !important;
+        }
+        .pipeline-grid {
+            grid-template-columns: 1fr 1fr !important;
+            gap: .55rem !important;
+        }
+        .pipeline-card {
+            padding: .75rem .8rem !important;
+            border-radius: 15px !important;
+        }
+        .pipeline-card .value {
+            font-size: 1.18rem !important;
+        }
+        .pipeline-field-row {
+            grid-template-columns: 1fr !important;
+        }
+        .pipeline-field-row div:nth-child(2) {
+            border-left: 0 !important;
+            border-top: 1px solid rgba(229,229,231,.9);
+        }
+        .bar-row {
+            grid-template-columns: minmax(96px, 38%) minmax(96px, 1fr) 54px !important;
+            gap: .45rem !important;
+        }
+        .bar-label,
+        .bar-value {
+            font-size: .75rem !important;
+        }
+        [data-testid="stTabs"] [role="tablist"],
+        .stTabs [data-baseweb="tab-list"],
+        [data-testid="stSegmentedControl"] [role="radiogroup"],
+        [data-testid="stButtonGroup"] [role="radiogroup"] {
+            display: flex !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            overflow-x: auto !important;
+            scrollbar-width: none !important;
+            -webkit-overflow-scrolling: touch !important;
+            justify-content: flex-start !important;
+        }
+        [data-testid="stTabs"] [role="tablist"]::-webkit-scrollbar,
+        .stTabs [data-baseweb="tab-list"]::-webkit-scrollbar,
+        [data-testid="stSegmentedControl"] [role="radiogroup"]::-webkit-scrollbar,
+        [data-testid="stButtonGroup"] [role="radiogroup"]::-webkit-scrollbar {
+            display: none !important;
+        }
+        [data-testid="stTabs"] [role="tab"],
+        .stTabs [data-baseweb="tab"],
+        [data-testid="stSegmentedControl"] label,
+        [data-testid="stButtonGroup"] button[data-testid^="stBaseButton-segmented_control"] {
+            flex: 0 0 auto !important;
+            min-width: max-content !important;
+            padding-left: .86rem !important;
+            padding-right: .86rem !important;
+        }
+        [data-testid="stHorizontalBlock"] {
+            gap: .72rem !important;
+        }
+        [data-testid="stFileUploaderDropzone"] {
+            padding: .8rem .7rem !important;
+        }
+        [data-testid="stFileUploaderDropzone"] > span > button[data-testid="stBaseButton-secondary"] {
+            width: 100% !important;
+            min-width: 0 !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] {
+            display: flex !important;
+            flex-direction: row !important;
+            flex-wrap: nowrap !important;
+            align-items: center !important;
+            gap: .52rem !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] [data-testid="stColumn"]:first-child {
+            flex: 1 1 auto !important;
+            width: auto !important;
+            min-width: 0 !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] [data-testid="stColumn"]:last-child {
+            flex: 0 0 42px !important;
+            width: 42px !important;
+            min-width: 42px !important;
+        }
+        [data-testid="stSidebar"] [data-testid="stHorizontalBlock"] [data-testid="stColumn"]:last-child div.stButton > button {
+            width: 42px !important;
+            min-width: 42px !important;
+            height: 42px !important;
+            min-height: 42px !important;
+            padding: 0 !important;
+        }
+        [data-testid="stDataFrame"],
+        [data-testid="stVegaLiteChart"] {
+            max-width: 100% !important;
+            overflow-x: auto !important;
+        }
+        h2 { font-size: 1.02rem !important; }
+        h3 { font-size: .94rem !important; }
+    }
+    @media (max-width: 420px) {
+        .block-container { padding-left: .55rem !important; padding-right: .55rem !important; }
+        .business-topbar { padding-left: 3.35rem !important; padding-right: .55rem !important; }
+        .business-brand > span:not(.business-brand-mark) { max-width: 48vw !important; font-size: .82rem !important; }
+        .business-brand-mark { display: none !important; }
+        .hero h1 { font-size: 1.12rem !important; }
+        .diagnostic-summary { font-size: .74rem !important; }
+        [data-testid="stSidebar"] .stCaption { font-size: .68rem !important; }
+        .saved-file-row {
+            padding: .55rem .62rem !important;
+            min-height: 3rem !important;
+        }
+        [data-testid="stTabs"] [role="tab"],
+        .stTabs [data-baseweb="tab"],
+        [data-testid="stSegmentedControl"] label,
+        [data-testid="stButtonGroup"] button[data-testid^="stBaseButton-segmented_control"] {
+            min-height: 36px !important;
+            padding: .45rem .72rem !important;
+        }
     }
     </style>
     """,
@@ -1441,6 +1874,209 @@ def format_report_period_option(value: pd.Timestamp, report_type: str) -> str:
     return f"{start:%Y年%m月}（{start:%m-%d} 至 {end:%m-%d}）"
 
 
+NAV_ITEMS = ["经营总览", "渠道对比", "SKU 分析", "销售 Pipeline", "报告中心", "数据质量"]
+
+PIPELINE_FIELDS = [
+    ("Account / Company", "客户公司", "某智能硬件公司 / 盒马鲜生"),
+    ("Contact Person", "联系人", "采购经理 / 产品经理"),
+    ("Lead Source", "线索来源", "渠道复购 / 展会 / LinkedIn / 转介绍"),
+    ("Stage", "当前销售阶段", "初步沟通 / 技术交流 / 测试 / 报价 / 谈判"),
+    ("Deal Size", "预计订单金额", "RMB 500,000"),
+    ("Probability", "成交概率", "30% / 50% / 80%"),
+    ("Expected Close Date", "预计成交日期", "2026-07-30"),
+    ("Pain Point", "客户痛点", "现有成本高 / 供货不稳定 / 动销集中"),
+    ("Decision Maker", "决策人", "总经理 / 采购负责人"),
+    ("Next Step", "下一步动作", "安排技术会议 / 跟进样品反馈"),
+    ("Risk", "风险点", "价格高于竞品 / 审批周期长 / 技术未完成"),
+    ("Status Update", "最新进展", "已完成样品测试，等待反馈"),
+]
+PIPELINE_STAGE_ORDER = ["初步沟通", "技术交流", "测试", "报价", "谈判", "合同/采购", "成交", "流失"]
+PIPELINE_DEFAULT_ROWS = [
+    {
+        "Account / Company": "盒马鲜生",
+        "Contact Person": "采购经理",
+        "Lead Source": "渠道复购",
+        "Stage": "谈判",
+        "Deal Size": 128000,
+        "Probability": 0.78,
+        "Expected Close Date": "2026-06-28",
+        "Pain Point": "重点 SKU 补货节奏不稳定",
+        "Decision Maker": "采购负责人",
+        "Next Step": "确认下周采购单与仓配计划",
+        "Risk": "价格审批延迟",
+        "Status Update": "已对齐采购 SKU，待确认排期",
+    },
+    {
+        "Account / Company": "小象超市",
+        "Contact Person": "酒水品类",
+        "Lead Source": "月度复盘",
+        "Stage": "报价",
+        "Deal Size": 86000,
+        "Probability": 0.62,
+        "Expected Close Date": "2026-07-05",
+        "Pain Point": "城市覆盖增长但动销 SKU 集中",
+        "Decision Maker": "品类负责人",
+        "Next Step": "提交组合装试销方案",
+        "Risk": "试销城市未定",
+        "Status Update": "已完成销量复盘，等待报价反馈",
+    },
+    {
+        "Account / Company": "叮咚买菜",
+        "Contact Person": "平台招商",
+        "Lead Source": "新客拓展",
+        "Stage": "初步沟通",
+        "Deal Size": 52000,
+        "Probability": 0.38,
+        "Expected Close Date": "2026-07-18",
+        "Pain Point": "缺少稳定供货证明",
+        "Decision Maker": "平台招商负责人",
+        "Next Step": "补齐供货资质与报价",
+        "Risk": "准入审核周期较长",
+        "Status Update": "已建立联系人，待补齐资质材料",
+    },
+]
+
+
+def default_pipeline_frame() -> pd.DataFrame:
+    return pd.DataFrame(PIPELINE_DEFAULT_ROWS, columns=[field for field, _, _ in PIPELINE_FIELDS])
+
+
+def normalize_pipeline_frame(frame: pd.DataFrame | None) -> pd.DataFrame:
+    result = frame.copy() if frame is not None and not frame.empty else default_pipeline_frame()
+    if "Contact" in result.columns and "Contact Person" not in result.columns:
+        result["Contact Person"] = result["Contact"]
+    for column, _, _ in PIPELINE_FIELDS:
+        if column not in result.columns:
+            result[column] = ""
+    result = result[[column for column, _, _ in PIPELINE_FIELDS]].copy()
+    result["Deal Size"] = pd.to_numeric(result["Deal Size"], errors="coerce").fillna(0.0)
+    probability = pd.to_numeric(result["Probability"], errors="coerce").fillna(0.0)
+    if probability.max() > 1:
+        probability = probability / 100
+    result["Probability"] = probability.clip(0, 1)
+    result["Expected Close Date"] = pd.to_datetime(result["Expected Close Date"], errors="coerce").dt.date
+    text_columns = [column for column, _, _ in PIPELINE_FIELDS if column not in {"Deal Size", "Probability", "Expected Close Date"}]
+    for column in text_columns:
+        result[column] = result[column].fillna("").astype(str)
+    meaningful_text = result[text_columns].apply(lambda column: column.str.strip().ne(""))
+    meaningful_numeric = result[["Deal Size", "Probability"]].abs().sum(axis=1).ne(0)
+    meaningful_date = pd.to_datetime(result["Expected Close Date"], errors="coerce").notna()
+    result = result[meaningful_text.any(axis=1) | meaningful_numeric | meaningful_date].reset_index(drop=True)
+    if result.empty:
+        return default_pipeline_frame()
+    return result
+
+
+def get_pipeline_frame() -> pd.DataFrame:
+    if "pipeline_records" not in st.session_state:
+        st.session_state["pipeline_records"] = default_pipeline_frame().to_dict("records")
+    return normalize_pipeline_frame(pd.DataFrame(st.session_state["pipeline_records"]))
+
+
+def pipeline_report_records() -> list[dict[str, object]]:
+    frame = get_pipeline_frame()
+    result = frame.copy()
+    result["Expected Close Date"] = result["Expected Close Date"].map(
+        lambda value: "" if pd.isna(value) else str(value)
+    )
+    return result.to_dict("records")
+
+
+def render_pipeline_cards(frame: pd.DataFrame) -> None:
+    open_frame = frame[~frame["Stage"].isin(["成交", "流失"])].copy()
+    open_amount = float(open_frame["Deal Size"].sum())
+    weighted_amount = float((open_frame["Deal Size"] * open_frame["Probability"]).sum())
+    high_risk_count = int(open_frame["Risk"].astype(str).str.strip().ne("").sum())
+    upcoming = open_frame[
+        pd.to_datetime(open_frame["Expected Close Date"], errors="coerce")
+        .between(pd.Timestamp.today().normalize(), pd.Timestamp.today().normalize() + pd.Timedelta(days=30))
+    ]
+    card_html = f"""
+    <div class="pipeline-grid">
+      <div class="pipeline-card"><div class="label">开放商机</div><div class="value">{len(open_frame):,}</div><div class="hint">未成交 / 未流失</div></div>
+      <div class="pipeline-card"><div class="label">预计订单金额</div><div class="value">¥{open_amount:,.0f}</div><div class="hint">按开放商机合计</div></div>
+      <div class="pipeline-card"><div class="label">加权预测金额</div><div class="value">¥{weighted_amount:,.0f}</div><div class="hint">金额 × 成交概率</div></div>
+      <div class="pipeline-card"><div class="label">30 天内预计成交</div><div class="value">{len(upcoming):,}</div><div class="hint">需优先跟进 · 风险 {high_risk_count} 条</div></div>
+    </div>
+    """
+    st.markdown(card_html, unsafe_allow_html=True)
+
+
+def render_pipeline_module() -> None:
+    st.subheader("销售 Pipeline")
+    st.caption("维护重点客户、销售阶段、预计金额、成交概率和下一步动作；日报、周报、月报会同步引用这里的 Pipeline 分析。")
+    pipeline_frame = get_pipeline_frame()
+    render_pipeline_cards(pipeline_frame)
+    edited = st.data_editor(
+        pipeline_frame,
+        width="stretch",
+        height=210,
+        hide_index=True,
+        num_rows="dynamic",
+        column_config={
+            "Stage": st.column_config.SelectboxColumn("Stage", options=PIPELINE_STAGE_ORDER),
+            "Deal Size": st.column_config.NumberColumn("Deal Size", min_value=0, step=1000, format="¥%d"),
+            "Probability": st.column_config.NumberColumn("Probability", min_value=0.0, max_value=1.0, step=0.05, format="%.0%"),
+            "Expected Close Date": st.column_config.DateColumn("Expected Close Date"),
+        },
+        key="pipeline-editor",
+    )
+    normalized = normalize_pipeline_frame(edited)
+    st.session_state["pipeline_records"] = normalized.to_dict("records")
+
+    left, right = st.columns([1.1, .9])
+    with left:
+        st.markdown("**阶段金额分布**")
+        stage_frame = (
+            normalized.groupby("Stage", as_index=False)
+            .agg(Deal_Size=("Deal Size", "sum"), Count=("Stage", "size"))
+        )
+        stage_frame["Stage"] = pd.Categorical(stage_frame["Stage"], categories=PIPELINE_STAGE_ORDER, ordered=True)
+        stage_frame = stage_frame.sort_values("Stage").rename(columns={"Stage": "阶段", "Deal_Size": "预计金额", "Count": "商机数"})
+        stage_frame = stage_frame[stage_frame["预计金额"] > 0]
+        if stage_frame.empty:
+            st.info("当前 Pipeline 暂无预计金额。")
+        else:
+            st.bar_chart(stage_frame.set_index("阶段")["预计金额"], height=210)
+    with right:
+        st.markdown("**字段说明**")
+        field_rows = "".join(
+            f"<div class='pipeline-field-row'><div>{html.escape(field)}<br><small>{html.escape(example)}</small></div><div>{html.escape(label)}</div></div>"
+            for field, label, example in PIPELINE_FIELDS
+        )
+        st.markdown(f"<div class='pipeline-field-table'>{field_rows}</div>", unsafe_allow_html=True)
+
+    st.subheader("本周跟进行动")
+    action_rows = normalized[
+        ~normalized["Stage"].isin(["成交", "流失"])
+    ][[
+        "Account / Company",
+        "Stage",
+        "Deal Size",
+        "Probability",
+        "Expected Close Date",
+        "Next Step",
+        "Risk",
+        "Status Update",
+    ]].copy()
+    action_rows["Deal Size"] = action_rows["Deal Size"].map(lambda value: f"¥{value:,.0f}")
+    action_rows["Probability"] = action_rows["Probability"].map(lambda value: f"{value:.0%}")
+    st.dataframe(
+        action_rows.rename(columns={
+            "Account / Company": "客户公司",
+            "Stage": "阶段",
+            "Deal Size": "预计金额",
+            "Probability": "成交概率",
+            "Expected Close Date": "预计成交日期",
+            "Next Step": "下一步动作",
+            "Risk": "风险点",
+            "Status Update": "最新进展",
+        }),
+        width="stretch",
+        hide_index=True,
+    )
+
+
 with st.sidebar:
     st.markdown("<div class='sidebar-top-fill'></div>", unsafe_allow_html=True)
     st.title("数据接入")
@@ -1474,6 +2110,16 @@ with st.sidebar:
             _reset_upload_widget()
             st.rerun()
     use_sample = st.toggle("使用示例数据", value=not saved_uploads)
+    st.markdown("<div class='sidebar-nav-title'>功能导航</div>", unsafe_allow_html=True)
+    active_module = st.radio(
+        "功能导航",
+        NAV_ITEMS,
+        index=NAV_ITEMS.index(st.session_state.get("active_module", "经营总览"))
+        if st.session_state.get("active_module", "经营总览") in NAV_ITEMS
+        else 0,
+        key="active_module",
+        label_visibility="collapsed",
+    )
 
 loaded_files: list[dict[str, object]] = []
 profiles: list[dict[str, object]] = []
@@ -1608,11 +2254,7 @@ if amount_channels < total_channels:
         f"{'、'.join(missing_amount_channels)} 上传的数据没有销售额或售价字段，因此不纳入金额合计。"
     )
 
-overview_tab, channel_tab, sku_tab, report_tab, quality_tab = st.tabs(
-    ["经营总览", "渠道对比", "SKU 分析", "报告中心", "数据质量"]
-)
-
-with overview_tab:
+if active_module == "经营总览":
     summaries = channel_summary(filtered)
     cards = st.columns(min(max(len(summaries), 1), 4))
     for index, row in enumerate(summaries.head(4).itertuples(index=False)):
@@ -1724,7 +2366,7 @@ with overview_tab:
         st.subheader("高优先级异常")
         render_table(anomalies.head(15), "当前没有识别到需要立即跟进的高优先级异常。")
 
-with channel_tab:
+elif active_module == "渠道对比":
     if not selected_channels:
         st.info("请至少选择一个渠道。")
     else:
@@ -1760,7 +2402,7 @@ with channel_tab:
                     "当前渠道暂无可展示的 SKU 明细。",
                 )
 
-with sku_tab:
+elif active_module == "SKU 分析":
     sku_data = sku_summary(filtered)
     if not sku_data.empty:
         sku_data = sku_data.sort_values("sales_qty", ascending=False)
@@ -1794,7 +2436,10 @@ with sku_tab:
             hide_index=True,
         )
 
-with report_tab:
+elif active_module == "销售 Pipeline":
+    render_pipeline_module()
+
+elif active_module == "报告中心":
     st.subheader("经营报告中心")
     report_type_label = st.segmented_control(
         "报告类型",
@@ -1855,6 +2500,7 @@ with report_tab:
         "weather_note": weather_note,
         "holiday_note": holiday_note,
         "activity_note": activity_note,
+        "pipeline_records": pipeline_report_records(),
     }
     report_text = generate_period_report(filtered, report_type, report_date, report_context)
     word_bytes = export_period_report_docx(filtered, report_type, report_date, report_context)
@@ -1915,7 +2561,7 @@ with report_tab:
         st.markdown("**库存风险**")
         st.dataframe(format_table(report_tables["inventory"]), width="stretch", hide_index=True)
 
-with quality_tab:
+elif active_module == "数据质量":
     st.subheader("文件识别结果")
     quality_rows = []
     for profile in profiles:
