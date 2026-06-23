@@ -3,26 +3,31 @@
 set -u
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
-APP_NAME="retail-channel-ai-assistant"
-HEALTH_URL="http://127.0.0.1:8501/_stcore/health"
+PORT="${PORT:-8502}"
+SERVER_HOST="${SERVER_HOST:-127.0.0.1}"
+LOG_FILE="$ROOT/logs/streamlit.log"
+PID_FILE="$ROOT/logs/streamlit.pid"
+HEALTH_URL="http://$SERVER_HOST:$PORT/_stcore/health"
 
-if command -v docker >/dev/null 2>&1 && docker info >/dev/null 2>&1; then
-    container_status="$(docker ps -a --filter "name=^/${APP_NAME}$" --format "{{.Status}}" 2>/dev/null)"
-    if [[ -n "$container_status" ]]; then
-        echo "Docker container: $container_status"
+if [[ -f "$PID_FILE" ]]; then
+    pid="$(cat "$PID_FILE" 2>/dev/null || true)"
+    if [[ -n "$pid" ]] && kill -0 "$pid" >/dev/null 2>&1; then
+        echo "Process: running (pid $pid)"
     else
-        echo "Docker container: not created"
+        echo "Process: stale pid file"
     fi
 else
-    echo "Docker: unavailable"
+    echo "Process: not started by script"
 fi
 
 if curl -fsS --max-time 2 "$HEALTH_URL" >/dev/null 2>&1; then
     echo "Health: ok"
-    echo "URL: http://127.0.0.1:8501/"
+    echo "URL: http://$SERVER_HOST:$PORT/"
+    echo "Logs: $LOG_FILE"
     exit 0
 fi
 
 echo "Health: unavailable"
-echo "Logs: docker logs $APP_NAME"
+echo "URL: http://$SERVER_HOST:$PORT/"
+echo "Logs: $LOG_FILE"
 exit 1

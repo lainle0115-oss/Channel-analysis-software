@@ -28,14 +28,15 @@
 
 ## 快速运行
 
-本地默认使用 OrbStack 提供的 Docker 引擎启动，不再直接运行宿主机 Streamlit。
+本地开发默认直接使用 Python 虚拟环境启动 Streamlit，不依赖 Docker / OrbStack。默认端口为
+`8502`，用于避开本机可能被占用的 `8501`。
 
 ```bash
 ./scripts/start_app.sh
 ```
 
-浏览器访问 `http://127.0.0.1:8501/`。启动脚本会自动构建镜像并运行容器，上传文件持久化到
-`.streamlit/uploaded_files/`。常用服务命令：
+浏览器访问 `http://127.0.0.1:8502/`。上传文件会持久化到 `.streamlit/uploaded_files/`。
+常用本地服务命令：
 
 ```bash
 ./scripts/status_app.sh
@@ -43,7 +44,13 @@
 ./scripts/stop_app.sh
 ```
 
-修改代码后运行 `./scripts/restart_app.sh`，脚本会重新构建镜像并启动新容器。
+如果需要临时换端口：
+
+```bash
+PORT=8503 ./scripts/start_app.sh
+```
+
+本地确认效果后，再提交并推送到 GitHub，Render 会自动部署线上版本。
 
 运行测试：
 
