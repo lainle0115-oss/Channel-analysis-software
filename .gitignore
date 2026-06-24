@@ -13,5 +13,9 @@ output/
 
 .streamlit/secrets.toml
 .streamlit/uploaded_files/
+.streamlit/*.sqlite
+.streamlit/*.sqlite3
+.streamlit/*.sqlite-shm
+.streamlit/*.sqlite-wal
 
 .env

@@ -33,11 +33,7 @@ if [[ -n "$port_pid" ]]; then
 fi
 
 cd "$ROOT"
-nohup "$ROOT/.venv/bin/python" -m streamlit run "$ROOT/app.py" \
-    --server.address "$SERVER_HOST" \
-    --server.port "$PORT" \
-    --server.headless true \
-    --browser.gatherUsageStats false </dev/null >> "$LOG_FILE" 2>&1 &
+PORT="$PORT" SERVER_HOST="$SERVER_HOST" nohup "$ROOT/scripts/supervise_app.sh" </dev/null >> "$LOG_FILE" 2>&1 &
 
 echo $! > "$PID_FILE"
 

@@ -1,6 +1,5 @@
 from pathlib import Path
 import hashlib
-import hmac
 import html
 import json
 import os
@@ -21,6 +20,7 @@ from retail_assistant.analytics import (  # noqa: E402
     latest_inventory_rows,
     sku_summary,
 )
+from retail_assistant.auth_store import AuthStore, AuthStoreError, AuthUser  # noqa: E402
 from retail_assistant.charts import (  # noqa: E402
     choose_available_metric,
     trend_chart,
@@ -1746,38 +1746,82 @@ st.markdown(
 )
 
 
-def require_app_password() -> None:
-    """Gate public deployments when APP_PASSWORD is configured."""
-    configured_password = os.environ.get("APP_PASSWORD", "").strip()
-    if not configured_password:
-        return
-    if st.session_state.get("app_password_ok") is True:
-        return
+@st.cache_resource(show_spinner=False)
+def get_auth_store() -> AuthStore:
+    store = AuthStore()
+    store.init_db()
+    return store
+
+
+def _session_user() -> AuthUser | None:
+    raw_user = st.session_state.get("current_user")
+    if not isinstance(raw_user, dict) or not raw_user.get("id"):
+        return None
+    store = get_auth_store()
+    user = store.get_user(str(raw_user["id"]))
+    if user is None:
+        st.session_state.pop("current_user", None)
+    return user
+
+
+def require_account_login() -> AuthUser:
+    """Require a registered account before showing any customer data."""
+    try:
+        store = get_auth_store()
+    except AuthStoreError as exc:
+        st.error(str(exc))
+        st.stop()
+
+    current = _session_user()
+    if current is not None:
+        return current
 
     st.markdown(
         """
-        <div class="hero">
+        <div class="hero auth-hero">
           <div>
-            <div class="hero-kicker">访问验证</div>
+            <div class="hero-kicker">账号登录</div>
             <h1>零售渠道经营驾驶舱</h1>
           </div>
-          <p>请输入访问口令后继续。上线环境建议通过 Render 环境变量 APP_PASSWORD 配置。</p>
+          <p>请登录后继续。每个账号只看到自己的上传文件；管理员可查看用户与上传概览。</p>
         </div>
         """,
         unsafe_allow_html=True,
     )
-    with st.form("app-password-form"):
-        password = st.text_input("访问口令", type="password", placeholder="输入 APP_PASSWORD")
-        submitted = st.form_submit_button("进入工作台", type="primary")
-    if submitted:
-        if hmac.compare_digest(password, configured_password):
-            st.session_state["app_password_ok"] = True
-            st.rerun()
-        st.error("访问口令不正确。")
+    login_tab, register_tab = st.tabs(["登录", "注册"])
+    with login_tab:
+        with st.form("account-login-form", clear_on_submit=False):
+            email = st.text_input("邮箱", key="login-email")
+            password = st.text_input("密码", type="password", key="login-password")
+            submitted = st.form_submit_button("登录", type="primary")
+        if submitted:
+            user = store.authenticate(email, password)
+            if user is None:
+                st.error("邮箱或密码不正确。")
+            else:
+                st.session_state["current_user"] = user.to_session()
+                st.rerun()
+
+    with register_tab:
+        with st.form("account-register-form", clear_on_submit=False):
+            name = st.text_input("姓名 / 公司名", key="register-name")
+            email = st.text_input("注册邮箱", key="register-email")
+            password = st.text_input("设置密码", type="password", key="register-password")
+            submitted = st.form_submit_button("创建账号", type="primary")
+        if submitted:
+            try:
+                user = store.register_user(email, password, name)
+            except ValueError as exc:
+                st.error(str(exc))
+            else:
+                st.session_state["current_user"] = user.to_session()
+                st.success("账号已创建。")
+                st.rerun()
+    st.info("如果 Render 已配置 ADMIN_EMAIL / ADMIN_PASSWORD，请直接用该管理员账号登录。否则第一个注册账号会自动成为管理员。")
     st.stop()
 
 
-require_app_password()
+current_user = require_account_login()
 
 
 def _safe_upload_filename(name: str) -> str:
@@ -1785,9 +1829,14 @@ def _safe_upload_filename(name: str) -> str:
     return cleaned or "uploaded_file"
 
 
-def _is_safe_upload_path(path: Path) -> bool:
+def _user_upload_dir(user_id: str) -> Path:
+    return UPLOAD_STORE / user_id
+
+
+def _is_safe_upload_path(path: Path, user_id: str | None = None) -> bool:
     try:
-        return path.resolve().is_relative_to(UPLOAD_STORE.resolve())
+        root = _user_upload_dir(user_id).resolve() if user_id else UPLOAD_STORE.resolve()
+        return path.resolve().is_relative_to(root)
     except (OSError, RuntimeError):
         return False
 
@@ -1804,7 +1853,7 @@ def _upload_validation_error(name: str, size: int) -> str | None:
     return None
 
 
-def _load_saved_uploads() -> list[dict[str, object]]:
+def _load_legacy_saved_uploads() -> list[dict[str, object]]:
     if not UPLOAD_MANIFEST.exists():
         return []
     try:
@@ -1823,30 +1872,65 @@ def _load_saved_uploads() -> list[dict[str, object]]:
             and _upload_validation_error(name, size) is None
         ):
             valid.append(record)
-    if isinstance(records, list) and len(valid) != len(records):
-        if valid:
-            _write_saved_uploads(valid)
-        else:
-            try:
-                UPLOAD_MANIFEST.unlink(missing_ok=True)
-            except OSError:
-                pass
     return valid
-
-
-def _write_saved_uploads(records: list[dict[str, object]]) -> None:
-    UPLOAD_STORE.mkdir(parents=True, exist_ok=True)
-    UPLOAD_MANIFEST.write_text(json.dumps(records, ensure_ascii=False, indent=2), encoding="utf-8")
 
 
 def _reset_upload_widget() -> None:
     st.session_state["upload_nonce"] = int(st.session_state.get("upload_nonce", 0)) + 1
 
 
-def _persist_uploads(uploaded_files: list[object] | None) -> tuple[list[dict[str, object]], list[str]]:
-    records = _load_saved_uploads()
-    seen = {str(record.get("id")) for record in records}
-    changed = False
+def _migrate_legacy_uploads_for_user(user: AuthUser) -> None:
+    session_key = f"legacy_uploads_migrated_{user.id}"
+    if st.session_state.get(session_key):
+        return
+    store = get_auth_store()
+    existing = store.list_uploads(user.id)
+    if existing:
+        st.session_state[session_key] = True
+        return
+    for record in _load_legacy_saved_uploads():
+        path = Path(str(record.get("path", "")))
+        if not path.exists() or not path.is_file():
+            continue
+        try:
+            content = path.read_bytes()
+        except OSError:
+            continue
+        digest = hashlib.sha256(content).hexdigest()[:16]
+        target_dir = _user_upload_dir(user.id)
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target = target_dir / f"{digest}_{_safe_upload_filename(str(record.get('name', path.name)))}"
+        if not target.exists():
+            target.write_bytes(content)
+        store.add_upload(user.id, str(record.get("name", path.name)), str(target), int(record.get("size") or target.stat().st_size))
+    st.session_state[session_key] = True
+
+
+def _load_saved_uploads(user: AuthUser) -> list[dict[str, object]]:
+    _migrate_legacy_uploads_for_user(user)
+    store = get_auth_store()
+    records = store.list_uploads(user.id)
+    valid: list[dict[str, object]] = []
+    for record in records:
+        path = Path(str(record.get("path", "")))
+        name = str(record.get("name", path.name))
+        size = int(record.get("size") or 0)
+        if (
+            path.exists()
+            and path.is_file()
+            and _is_safe_upload_path(path, user.id)
+            and _upload_validation_error(name, size) is None
+        ):
+            valid.append(record)
+        else:
+            store.delete_upload(str(record.get("id", "")), user.id, is_admin=user.is_admin)
+    return valid
+
+
+def _persist_uploads(uploaded_files: list[object] | None, user: AuthUser) -> tuple[list[dict[str, object]], list[str]]:
+    store = get_auth_store()
+    records = _load_saved_uploads(user)
+    seen = {str(record.get("name")) + ":" + str(record.get("size")) for record in records}
     errors: list[str] = []
     for uploaded in uploaded_files or []:
         content = uploaded.getvalue()
@@ -1856,59 +1940,47 @@ def _persist_uploads(uploaded_files: list[object] | None) -> tuple[list[dict[str
             errors.append(validation_error)
             continue
         digest = hashlib.sha256(content).hexdigest()[:16]
-        if digest in seen:
+        identity = f"{original_name}:{len(content)}"
+        if identity in seen:
             continue
         safe_name = _safe_upload_filename(original_name)
-        target = UPLOAD_STORE / f"{digest}_{safe_name}"
-        UPLOAD_STORE.mkdir(parents=True, exist_ok=True)
+        target_dir = _user_upload_dir(user.id)
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target = target_dir / f"{digest}_{safe_name}"
+        counter = 1
+        while target.exists():
+            target = target_dir / f"{digest}_{counter}_{safe_name}"
+            counter += 1
         target.write_bytes(content)
-        records.append({
-            "id": digest,
-            "name": original_name,
-            "path": str(target),
-            "size": len(content),
-        })
-        seen.add(digest)
-        changed = True
-    if changed:
-        _write_saved_uploads(records)
-    return records, errors
+        records.append(store.add_upload(user.id, original_name, str(target), len(content)))
+        seen.add(identity)
+    return _load_saved_uploads(user), errors
 
 
-def _delete_saved_upload(upload_id: str) -> bool:
-    records = _load_saved_uploads()
-    kept: list[dict[str, object]] = []
-    deleted = False
-    for record in records:
-        if str(record.get("id")) == upload_id:
-            try:
-                Path(str(record.get("path", ""))).unlink(missing_ok=True)
-            except OSError:
-                pass
-            deleted = True
-        else:
-            kept.append(record)
-    if deleted:
-        if kept:
-            _write_saved_uploads(kept)
-        else:
-            try:
-                UPLOAD_MANIFEST.unlink(missing_ok=True)
-            except OSError:
-                pass
-    return deleted
-
-
-def _clear_saved_uploads() -> None:
-    for record in _load_saved_uploads():
+def _delete_saved_upload(upload_id: str, user: AuthUser) -> bool:
+    store = get_auth_store()
+    record = store.delete_upload(upload_id, user.id, is_admin=user.is_admin)
+    if not record:
+        return False
+    path = Path(str(record.get("path", "")))
+    if _is_safe_upload_path(path, str(record.get("user_id", user.id))):
         try:
-            Path(str(record.get("path", ""))).unlink(missing_ok=True)
+            path.unlink(missing_ok=True)
         except OSError:
             pass
-    try:
-        UPLOAD_MANIFEST.unlink(missing_ok=True)
-    except OSError:
-        pass
+    return True
+
+
+def _clear_saved_uploads(user: AuthUser) -> None:
+    store = get_auth_store()
+    for record in store.clear_uploads(user.id):
+        path = Path(str(record.get("path", "")))
+        if not _is_safe_upload_path(path, user.id):
+            continue
+        try:
+            path.unlink(missing_ok=True)
+        except OSError:
+            pass
 
 
 def _format_bytes(size: object) -> str:
@@ -1995,7 +2067,7 @@ def _load_channel_dataset(
     return data, profiles, errors, None
 
 
-def render_data_intake_panel(saved_uploads: list[dict[str, object]]) -> tuple[list[dict[str, object]], bool]:
+def render_data_intake_panel(saved_uploads: list[dict[str, object]], user: AuthUser) -> tuple[list[dict[str, object]], bool]:
     st.markdown(
         f"""
         <div class="data-intake-panel">
@@ -2022,7 +2094,7 @@ def render_data_intake_panel(saved_uploads: list[dict[str, object]]) -> tuple[li
             key=f"uploaded-files-{st.session_state['upload_nonce']}",
             label_visibility="collapsed",
         )
-        saved_uploads, upload_errors = _persist_uploads(uploads)
+        saved_uploads, upload_errors = _persist_uploads(uploads, user)
         for upload_error in upload_errors:
             st.warning(upload_error)
         if "use_sample_data" not in st.session_state:
@@ -2031,7 +2103,7 @@ def render_data_intake_panel(saved_uploads: list[dict[str, object]]) -> tuple[li
         st.markdown("<div class='data-intake-subtitle'>数据模式</div>", unsafe_allow_html=True)
         use_sample = st.toggle("使用示例数据", key="use_sample_data")
         if saved_uploads and st.button("清除已保存文件", type="secondary", width="stretch"):
-            _clear_saved_uploads()
+            _clear_saved_uploads(user)
             _reset_upload_widget()
             st.rerun()
 
@@ -2061,7 +2133,7 @@ def render_data_intake_panel(saved_uploads: list[dict[str, object]]) -> tuple[li
                             help=f"删除 {record['name']}",
                             width="stretch",
                         ):
-                            if _delete_saved_upload(str(record.get("id"))):
+                            if _delete_saved_upload(str(record.get("id")), user):
                                 _reset_upload_widget()
                             st.rerun()
     else:
@@ -2248,6 +2320,7 @@ def format_report_period_option(value: pd.Timestamp, report_type: str) -> str:
 
 
 NAV_ITEMS = ["经营总览", "渠道对比", "SKU 分析", "销售 Pipeline", "报告中心", "数据质量"]
+ADMIN_NAV_ITEM = "用户管理"
 
 PIPELINE_FIELDS = [
     ("Account / Company", "客户公司", "某智能硬件公司 / 盒马鲜生"),
@@ -2487,15 +2560,56 @@ def render_pipeline_module() -> None:
     )
 
 
+def render_admin_module(user: AuthUser) -> None:
+    if not user.is_admin:
+        st.error("当前账号没有管理员权限。")
+        return
+    store = get_auth_store()
+    st.subheader("用户管理")
+    st.caption("管理员可查看账号、角色、注册时间、最近登录和上传文件概览。")
+
+    users = pd.DataFrame(store.list_users())
+    if users.empty:
+        st.info("暂无用户。")
+    else:
+        users_display = users.rename(columns={
+            "email": "邮箱",
+            "name": "姓名 / 公司",
+            "role": "角色",
+            "created_at": "注册时间",
+            "last_login_at": "最近登录",
+            "upload_count": "上传文件数",
+            "upload_bytes": "上传容量",
+        })[["邮箱", "姓名 / 公司", "角色", "注册时间", "最近登录", "上传文件数", "上传容量"]].copy()
+        users_display["上传容量"] = users_display["上传容量"].map(_format_bytes)
+        st.dataframe(users_display, width="stretch", hide_index=True)
+
+    uploads = pd.DataFrame(store.list_uploads())
+    st.subheader("上传文件概览")
+    if uploads.empty:
+        st.info("暂无上传文件。")
+    else:
+        uploads_display = uploads.rename(columns={
+            "user_email": "用户",
+            "name": "文件名",
+            "size": "文件大小",
+            "created_at": "上传时间",
+            "path": "服务器路径",
+        })[["用户", "文件名", "文件大小", "上传时间", "服务器路径"]].copy()
+        uploads_display["文件大小"] = uploads_display["文件大小"].map(_format_bytes)
+        st.dataframe(uploads_display, width="stretch", hide_index=True)
+
+
 with st.sidebar:
     st.markdown("<div class='sidebar-top-fill'></div>", unsafe_allow_html=True)
     st.markdown("<div class='sidebar-nav-title'>功能导航</div>", unsafe_allow_html=True)
+    nav_items = [*NAV_ITEMS, *([ADMIN_NAV_ITEM] if current_user.is_admin else [])]
     query_module = st.query_params.get("module")
-    active_module = query_module if query_module in NAV_ITEMS else st.session_state.get("active_module", "经营总览")
-    if active_module not in NAV_ITEMS:
+    active_module = query_module if query_module in nav_items else st.session_state.get("active_module", "经营总览")
+    if active_module not in nav_items:
         active_module = "经营总览"
     st.session_state["active_module"] = active_module
-    for nav_item in NAV_ITEMS:
+    for nav_item in nav_items:
         if st.button(
             nav_item,
             key=f"sidebar-nav-{nav_item}",
@@ -2505,6 +2619,13 @@ with st.sidebar:
             st.session_state["active_module"] = nav_item
             st.query_params["module"] = nav_item
             st.rerun()
+    st.markdown("---")
+    st.caption(f"当前账号：{current_user.email}")
+    if current_user.is_admin:
+        st.caption("权限：管理员")
+    if st.button("退出登录", key="logout", width="stretch"):
+        st.session_state.pop("current_user", None)
+        st.rerun()
 
 st.markdown(
     """
@@ -2537,9 +2658,13 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-saved_uploads = _load_saved_uploads()
+if active_module == ADMIN_NAV_ITEM:
+    render_admin_module(current_user)
+    st.stop()
+
+saved_uploads = _load_saved_uploads(current_user)
 if active_module == "经营总览":
-    saved_uploads, use_sample = render_data_intake_panel(saved_uploads)
+    saved_uploads, use_sample = render_data_intake_panel(saved_uploads, current_user)
 else:
     if "use_sample_data" not in st.session_state:
         st.session_state["use_sample_data"] = not bool(saved_uploads)
