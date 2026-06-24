@@ -402,6 +402,51 @@ def test_period_report_marks_missing_comparison_baseline():
     assert "同比数据不足" in report
 
 
+def test_period_report_pipeline_section_is_opt_in():
+    data = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2026-06-10"]),
+            "channel": ["盒马"],
+            "sku_id": ["H1"],
+            "sku_name": ["盒马商品"],
+            "city": ["上海"],
+            "sales_qty": [10],
+            "sales_amount": [100],
+            "stock_qty": [30],
+        }
+    )
+    pipeline_context = {
+        "pipeline_records": [
+            {
+                "Account / Company": "盒马鲜生",
+                "Contact Person": "采购经理",
+                "Lead Source": "渠道复购",
+                "Stage": "谈判",
+                "Deal Size": 128000,
+                "Probability": 0.78,
+                "Expected Close Date": "2026-06-28",
+                "Pain Point": "补货不稳定",
+                "Decision Maker": "采购负责人",
+                "Next Step": "确认下周采购单",
+                "Risk": "价格审批延迟",
+                "Status Update": "待确认排期",
+            }
+        ]
+    }
+
+    default_report = generate_period_report(data, "daily", pd.Timestamp("2026-06-10"), pipeline_context)
+    enabled_report = generate_period_report(
+        data,
+        "daily",
+        pd.Timestamp("2026-06-10"),
+        {**pipeline_context, "include_pipeline": True},
+    )
+
+    assert "销售 Pipeline 分析" not in default_report
+    assert "销售 Pipeline 分析" in enabled_report
+    assert "盒马鲜生" in enabled_report
+
+
 def test_period_report_calculates_year_over_year_growth():
     data = pd.DataFrame(
         {

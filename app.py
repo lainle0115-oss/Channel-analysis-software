@@ -1,7 +1,9 @@
 from pathlib import Path
 import hashlib
+import hmac
 import html
 import json
+import os
 import re
 import sys
 
@@ -41,6 +43,12 @@ from retail_assistant.weather import fetch_regional_weather, format_weather_note
 ROOT = Path(__file__).parent
 UPLOAD_STORE = ROOT / ".streamlit" / "uploaded_files"
 UPLOAD_MANIFEST = UPLOAD_STORE / "manifest.json"
+ALLOWED_UPLOAD_SUFFIXES = {".csv", ".xls", ".xlsx"}
+DEFAULT_MAX_UPLOAD_BYTES = 200 * 1024 * 1024
+try:
+    MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", DEFAULT_MAX_UPLOAD_BYTES))
+except ValueError:
+    MAX_UPLOAD_BYTES = DEFAULT_MAX_UPLOAD_BYTES
 
 st.set_page_config(page_title="零售渠道经营驾驶舱", page_icon="渠", layout="wide")
 st.markdown(
@@ -122,31 +130,53 @@ st.markdown(
         50% { background-position: 100% 50%; }
         100% { background-position: 0% 50%; }
     }
-    [data-testid="stSidebar"] h1 {
+    .sidebar-section-title {
+        position: relative;
         display: flex !important;
         align-items: center !important;
-        justify-content: center !important;
-        min-height: var(--sidebar-control-height) !important;
-        width: 100% !important;
-        margin: .08rem 0 .9rem !important;
-        padding: .62rem 1rem !important;
-        border-radius: 999px !important;
-        border: 1px solid rgba(255,255,255,.52) !important;
+        justify-content: flex-start !important;
+        min-height: 2.95rem !important;
+        width: 100%;
+        box-sizing: border-box;
+        margin: .08rem 0 .88rem !important;
+        padding: .62rem .86rem .62rem 1rem !important;
+        border-radius: 18px !important;
+        border: 1px solid var(--sidebar-pill-border) !important;
         background:
-            radial-gradient(circle at 20% 8%, rgba(255,255,255,.64), transparent 30%),
-            var(--button-1-gradient) !important;
-        background-size: 190% 190% !important;
-        color: #ffffff !important;
-        font-size: .98rem !important;
-        font-weight: 900 !important;
-        letter-spacing: -.02em !important;
-        text-align: center !important;
-        box-shadow: var(--button-1-shadow) !important;
-        animation: sidebarButtonShine 8s ease infinite;
+            radial-gradient(circle at 18% 0%, rgba(255,255,255,.82), transparent 36%),
+            linear-gradient(180deg, rgba(255,255,255,.38), rgba(255,255,255,.16)),
+            #ffffff !important;
+        color: #4f38e8 !important;
+        font-size: .92rem !important;
+        font-weight: 900;
+        letter-spacing: -.01em;
+        box-shadow: var(--sidebar-pill-shadow), 0 18px 38px rgba(90, 69, 245, .14) !important;
+        overflow: hidden;
     }
-    [data-testid="stSidebar"] h1 * {
-        color: #ffffff !important;
-        text-align: center !important;
+    .sidebar-section-title:before {
+        content: "";
+        width: 4px;
+        height: 1.35rem;
+        border-radius: 999px;
+        margin-right: .62rem;
+        background: var(--brand-gradient);
+        box-shadow: 0 6px 14px rgba(86, 61, 232, .22);
+    }
+    .sidebar-section-title:after {
+        content: "";
+        position: absolute;
+        right: .88rem;
+        width: .42rem;
+        height: .42rem;
+        border-radius: 999px;
+        background: rgba(79, 56, 232, .18);
+        box-shadow: 0 0 0 5px rgba(79, 56, 232, .06);
+    }
+    .sidebar-section-title span {
+        color: #4f38e8 !important;
+        font-size: .92rem !important;
+        font-weight: 900 !important;
+        line-height: 1.1 !important;
     }
     [data-testid="stSidebar"] h2, [data-testid="stSidebar"] h3 { font-size: .92rem; }
     [data-testid="stSidebar"] .stCaption { font-size: .72rem; line-height: 1.45; }
@@ -296,7 +326,9 @@ st.markdown(
         box-shadow: inset 0 1px 0 rgba(255,255,255,.84);
     }
     [data-testid="stFileUploaderDropzone"] > span > button[data-testid="stBaseButton-secondary"] {
-        display: inline-flex !important;
+        display: grid !important;
+        place-items: center !important;
+        position: relative !important;
         align-items: center !important;
         justify-content: center !important;
         text-align: center !important;
@@ -312,6 +344,7 @@ st.markdown(
         padding: .58rem 1rem !important;
         white-space: nowrap;
         line-height: 1 !important;
+        overflow: hidden !important;
         box-shadow: var(--sidebar-pill-shadow) !important;
         backdrop-filter: saturate(180%) blur(16px) !important;
         transition: transform .16s ease, box-shadow .16s ease, filter .16s ease !important;
@@ -325,8 +358,16 @@ st.markdown(
         transform: translateY(-1px);
         box-shadow: 0 14px 28px rgba(87, 80, 238, .16), inset 0 1px 0 rgba(255,255,255,.9) !important;
     }
-    [data-testid="stFileUploaderDropzone"] > span > button[data-testid="stBaseButton-secondary"] * {
+    [data-testid="stFileUploaderDropzone"] > span > button[data-testid="stBaseButton-secondary"] > * {
         color: #4f38e8 !important;
+        position: absolute !important;
+        inset: 0 !important;
+        display: grid !important;
+        place-items: center !important;
+        width: 100% !important;
+        height: 100% !important;
+        opacity: 0 !important;
+        pointer-events: none !important;
     }
     [data-testid="stFileUploaderFile"] {
         background: #ffffff !important;
@@ -469,117 +510,253 @@ st.markdown(
     }
     [role="option"] { color: var(--ink) !important; }
     [role="option"]:hover { background: var(--blue-soft) !important; }
-    .saved-file-row {
-        margin: .35rem 0;
-        padding: .62rem .7rem;
-        border: 1px solid var(--sidebar-pill-border);
-        border-radius: 14px;
-        background:
-            radial-gradient(circle at 16% 0%, rgba(255,255,255,.78), transparent 38%),
-            linear-gradient(180deg, rgba(255,255,255,.32), rgba(255,255,255,.12)),
-            var(--sidebar-pill-bg);
-        box-shadow: var(--sidebar-pill-shadow);
-        backdrop-filter: saturate(180%) blur(16px);
-        font-size: .78rem;
-        line-height: 1.35;
-        min-height: 3.35rem;
+    .saved-file-chip {
+        margin: .16rem 0;
+        padding: .46rem .52rem;
+        border: 1px solid rgba(210, 213, 219, .88);
+        border-radius: 10px;
+        background: rgba(255,255,255,.92);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.9);
+        min-height: 3.05rem;
         display: flex;
-        flex-direction: column;
-        justify-content: center;
+        align-items: center;
+        gap: .58rem;
+        overflow: hidden;
         transition: transform .16s ease, border-color .16s ease, box-shadow .16s ease;
     }
-    .saved-file-row:hover {
+    .saved-file-chip:hover {
         transform: translateY(-1px);
-        border-color: rgba(111, 88, 247, .36);
-        box-shadow: 0 14px 28px rgba(87, 80, 238, .14), inset 0 1px 0 rgba(255,255,255,.9);
+        border-color: rgba(111, 88, 247, .26);
+        box-shadow: 0 10px 22px rgba(87, 80, 238, .10), inset 0 1px 0 rgba(255,255,255,.96);
     }
-    .saved-file-row span {
+    .saved-file-icon {
+        width: 2.3rem;
+        height: 2.3rem;
+        min-width: 2.3rem;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 10px;
+        background: #eaf7ef;
+        color: #1f7a45 !important;
+        font-size: .64rem;
+        font-weight: 900;
+        letter-spacing: .03em;
+    }
+    .saved-file-meta {
+        min-width: 0;
+        flex: 1 1 auto;
+        line-height: 1.2;
+    }
+    .saved-file-name {
+        display: block;
+        color: var(--ink) !important;
+        font-size: .82rem;
+        font-weight: 760;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+    }
+    .saved-file-size {
+        display: block;
         color: var(--muted) !important;
         font-size: .72rem;
+        margin-top: .16rem;
+    }
+    div[data-testid="stHorizontalBlock"]:has(.saved-file-chip) {
+        align-items: center !important;
+    }
+    div[data-testid="stHorizontalBlock"]:has(.saved-file-chip) [data-testid="stColumn"]:last-child {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+    }
+    div[data-testid="stHorizontalBlock"]:has(.saved-file-chip) [data-testid="stColumn"]:last-child div.stButton > button {
+        width: 2.55rem !important;
+        min-width: 2.55rem !important;
+        height: 2.55rem !important;
+        min-height: 2.55rem !important;
+        padding: 0 !important;
+        border-radius: 999px !important;
+        font-size: 0 !important;
+        background: rgba(255,255,255,.92) !important;
+        border: 1px solid rgba(210, 213, 219, .9) !important;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.92), 0 8px 18px rgba(87, 80, 238, .08) !important;
+    }
+    div[data-testid="stHorizontalBlock"]:has(.saved-file-chip) [data-testid="stColumn"]:last-child div.stButton > button p {
+        font-size: .9rem !important;
+        font-weight: 900 !important;
+        color: #4f38e8 !important;
+        transform: none !important;
+    }
+    .data-intake-panel {
+        margin: 0 0 .62rem;
+        padding: .78rem .95rem;
+        border-radius: 20px;
+        border: 1px solid rgba(205, 194, 255, .72);
+        background:
+            radial-gradient(circle at 6% 0%, rgba(112, 91, 255, .10), transparent 32%),
+            linear-gradient(180deg, rgba(255,255,255,.96), rgba(255,255,255,.84));
+        box-shadow: 0 16px 34px rgba(87, 80, 238, .10), inset 0 1px 0 rgba(255,255,255,.96);
+    }
+    .data-intake-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+        margin-bottom: 0;
+    }
+    .data-intake-title {
+        display: flex;
+        align-items: center;
+        gap: .58rem;
+        color: #4f38e8;
+        font-weight: 900;
+        letter-spacing: -.01em;
+    }
+    .data-intake-title:before {
+        content: "";
+        width: 4px;
+        height: 1.28rem;
+        border-radius: 999px;
+        background: var(--brand-gradient);
+        box-shadow: 0 6px 14px rgba(86, 61, 232, .22);
+    }
+    .data-intake-meta {
+        color: var(--muted);
+        font-size: .78rem;
+        line-height: 1.55;
+    }
+    .data-intake-save-note {
+        display: inline-flex;
+        align-items: center;
+        gap: .45rem;
+        padding: .36rem .58rem;
+        border-radius: 999px;
+        background: rgba(111, 88, 247, .08);
+        color: #4f38e8;
+        font-size: .76rem;
+        font-weight: 760;
+        white-space: nowrap;
+    }
+    .data-intake-subtitle {
+        margin: .05rem 0 .3rem;
+        color: var(--ink);
+        font-size: .9rem;
+        font-weight: 820;
+    }
+    .data-intake-subtitle.compact {
+        margin-top: .5rem;
+    }
+    .data-intake-empty {
+        min-height: 3.8rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px dashed rgba(184, 169, 255, .72);
+        border-radius: 16px;
+        color: var(--muted);
+        background: rgba(255,255,255,.62);
+        font-size: .84rem;
     }
     .sidebar-nav-title {
         display: flex;
         align-items: center;
-        justify-content: center;
-        min-height: var(--sidebar-control-height);
+        justify-content: flex-start;
+        position: relative;
+        min-height: 2.95rem;
         width: 100%;
-        margin: 1.05rem 0 .72rem;
-        padding: .62rem 1rem;
-        border-radius: 999px;
-        border: 1px solid rgba(255,255,255,.52);
+        box-sizing: border-box;
+        margin: 1.12rem 0 .62rem;
+        padding: .62rem .86rem .62rem 1rem;
+        border-radius: 18px;
+        border: 1px solid var(--sidebar-pill-border);
         background:
-            radial-gradient(circle at 20% 8%, rgba(255,255,255,.64), transparent 30%),
-            var(--button-1-gradient);
-        background-size: 190% 190%;
-        box-shadow: var(--button-1-shadow);
+            radial-gradient(circle at 18% 0%, rgba(255,255,255,.82), transparent 36%),
+            linear-gradient(180deg, rgba(255,255,255,.38), rgba(255,255,255,.16)),
+            #ffffff;
+        box-shadow: var(--sidebar-pill-shadow), 0 18px 38px rgba(90, 69, 245, .14);
         font-weight: 900;
-        color: #ffffff;
+        color: #4f38e8;
         letter-spacing: -.01em;
-        text-align: center;
-        animation: sidebarButtonShine 8s ease infinite;
+        overflow: hidden;
+    }
+    .sidebar-nav-title:before {
+        content: "";
+        width: 4px;
+        height: 1.35rem;
+        border-radius: 999px;
+        margin-right: .62rem;
+        background: var(--brand-gradient);
+        box-shadow: 0 6px 14px rgba(86, 61, 232, .22);
+    }
+    .sidebar-nav-title:after {
+        content: "";
+        position: absolute;
+        right: .88rem;
+        width: .42rem;
+        height: .42rem;
+        border-radius: 999px;
+        background: rgba(79, 56, 232, .18);
+        box-shadow: 0 0 0 5px rgba(79, 56, 232, .06);
     }
     [data-testid="stSidebar"] [data-testid="stRadio"] {
-        margin-bottom: .85rem;
-    }
-    [data-testid="stSidebar"] [data-testid="stRadio"] > label,
-    [data-testid="stSidebar"] [data-testid="stRadio"] [data-testid="stWidgetLabel"] {
         display: none !important;
     }
-    [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] {
-        display: grid !important;
-        grid-template-columns: 1fr;
-        gap: .45rem;
-        width: 100% !important;
-        max-width: 100% !important;
+    .sidebar-subnav {
+        width: 100%;
+        box-sizing: border-box;
+        padding: 0 .42rem 0 1rem;
+        margin: 0 0 .92rem;
     }
-    [data-testid="stSidebar"] [data-testid="stRadio"] [role="radiogroup"] > div {
-        width: 100% !important;
-        max-width: 100% !important;
-    }
-    [data-testid="stSidebar"] [data-testid="stRadio"] label {
+    .sidebar-subnav-item {
+        position: relative;
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
-        width: 100% !important;
-        max-width: 100% !important;
+        width: calc(100% - 1.92rem) !important;
+        min-height: 2.48rem !important;
         box-sizing: border-box !important;
-        margin: 0 !important;
-        min-height: var(--sidebar-control-height) !important;
-        padding: .48rem .8rem !important;
+        margin: 0 0 .42rem 1.3rem !important;
+        padding: .48rem .78rem !important;
         border-radius: 999px !important;
-        border: 1px solid var(--sidebar-pill-border) !important;
-        background:
-            radial-gradient(circle at 18% 0%, rgba(255,255,255,.78), transparent 36%),
-            linear-gradient(180deg, rgba(255,255,255,.32), rgba(255,255,255,.12)),
-            var(--sidebar-pill-bg) !important;
-        box-shadow: var(--sidebar-pill-shadow) !important;
-        cursor: pointer !important;
-        transition: transform .16s ease, box-shadow .16s ease, background .16s ease;
-    }
-    [data-testid="stSidebar"] [data-testid="stRadio"] label:hover {
-        transform: translateY(-1px);
-        background:
-            radial-gradient(circle at 18% 0%, rgba(255,255,255,.82), transparent 36%),
-            linear-gradient(180deg, rgba(255,255,255,.36), rgba(255,255,255,.16)),
-            var(--sidebar-pill-hover) !important;
-    }
-    [data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) {
-        background: #fff !important;
-        border-color: rgba(111, 88, 247, .42) !important;
-        box-shadow: 0 18px 34px rgba(87, 80, 238, .18), inset 0 1px 0 rgba(255,255,255,.96) !important;
-    }
-    [data-testid="stSidebar"] [data-testid="stRadio"] label p,
-    [data-testid="stSidebar"] [data-testid="stRadio"] label span {
+        border: 1px solid rgba(184, 169, 255, .54) !important;
+        background: rgba(255,255,255,.82) !important;
         color: #5f636f !important;
+        box-shadow: 0 8px 20px rgba(87, 80, 238, .08), inset 0 1px 0 rgba(255,255,255,.9) !important;
+        text-decoration: none !important;
+        font-size: .82rem !important;
         font-weight: 850 !important;
+        line-height: 1.08 !important;
         text-align: center !important;
+        white-space: nowrap !important;
+        transition: transform .16s ease, color .16s ease, border-color .16s ease, box-shadow .16s ease;
     }
-    [data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) p,
-    [data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) span {
+    .sidebar-subnav-item:before {
+        content: "";
+        position: absolute;
+        left: -1.18rem;
+        width: .28rem;
+        height: .28rem;
+        border-radius: 999px;
+        background: rgba(111, 88, 247, .26);
+    }
+    .sidebar-subnav-item:hover {
+        transform: translateX(2px);
         color: #4f38e8 !important;
+        border-color: rgba(111, 88, 247, .38) !important;
+        box-shadow: 0 12px 26px rgba(87, 80, 238, .13), inset 0 1px 0 rgba(255,255,255,.94) !important;
     }
-    [data-testid="stSidebar"] [data-testid="stRadio"] label > div:first-child {
-        display: none !important;
+    .sidebar-subnav-item.active {
+        color: #4f38e8 !important;
+        border-color: rgba(111, 88, 247, .46) !important;
+        background: #ffffff !important;
+        box-shadow: 0 14px 28px rgba(87, 80, 238, .16), inset 0 -3px 0 rgba(111, 88, 247, .78) !important;
+        font-weight: 850 !important;
+    }
+    .sidebar-subnav-item.active:before {
+        background: var(--brand-gradient);
+        box-shadow: 0 0 0 4px rgba(111, 88, 247, .10);
     }
     .business-topbar {
         display: flex !important;
@@ -875,36 +1052,6 @@ st.markdown(
         color: var(--muted);
         font-size: .72rem;
     }
-    .pipeline-field-table {
-        border: 1px solid rgba(211,215,226,.82);
-        border-radius: 18px;
-        overflow: hidden;
-        background: #fff;
-        box-shadow: 0 10px 24px rgba(29,29,31,.05);
-    }
-    .pipeline-field-row {
-        display: grid;
-        grid-template-columns: 1.05fr .95fr;
-        gap: 0;
-        border-bottom: 1px solid rgba(229,229,231,.9);
-    }
-    .pipeline-field-row:last-child { border-bottom: 0; }
-    .pipeline-field-row div {
-        padding: .68rem .85rem;
-        font-weight: 760;
-    }
-    .pipeline-field-row small {
-        display: block;
-        margin-top: .2rem;
-        color: var(--muted);
-        font-size: .68rem;
-        line-height: 1.35;
-        font-weight: 650;
-    }
-    .pipeline-field-row div:nth-child(2) {
-        color: var(--muted);
-        border-left: 1px solid rgba(229,229,231,.9);
-    }
     .report-panel {
         background: var(--panel);
         border: 1px solid var(--line);
@@ -1182,6 +1329,9 @@ st.markdown(
         align-items: center !important;
         justify-content: center !important;
         width: 100% !important;
+        max-width: 100% !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
         min-height: var(--sidebar-control-height) !important;
         border-radius: 999px !important;
         background:
@@ -1238,6 +1388,9 @@ st.markdown(
         text-align: center !important;
         min-height: var(--sidebar-control-height) !important;
         min-width: 2rem !important;
+        max-width: 100% !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
         padding: .48rem .68rem !important;
         border-radius: 999px !important;
         background:
@@ -1314,12 +1467,16 @@ st.markdown(
         line-height: 1.45;
     }
     [data-testid="stFileUploaderDropzone"] > span > button[data-testid="stBaseButton-secondary"] { font-size: 0 !important; }
-    [data-testid="stFileUploaderDropzone"] > span > button[data-testid="stBaseButton-secondary"] span,
-    [data-testid="stFileUploaderDropzone"] > span > button[data-testid="stBaseButton-secondary"] p { display: none !important; }
     [data-testid="stFileUploaderDropzone"] > span > button[data-testid="stBaseButton-secondary"]:after {
         content: "选择文件";
-        display: block;
+        position: absolute;
+        inset: 0;
+        display: grid;
+        align-items: center;
+        justify-content: center;
+        place-items: center;
         width: 100%;
+        height: 100%;
         text-align: center;
         font-size: .82rem;
         font-weight: 850;
@@ -1486,13 +1643,6 @@ st.markdown(
         .pipeline-card .value {
             font-size: 1.18rem !important;
         }
-        .pipeline-field-row {
-            grid-template-columns: 1fr !important;
-        }
-        .pipeline-field-row div:nth-child(2) {
-            border-left: 0 !important;
-            border-top: 1px solid rgba(229,229,231,.9);
-        }
         .bar-row {
             grid-template-columns: minmax(96px, 38%) minmax(96px, 1fr) 54px !important;
             gap: .45rem !important;
@@ -1578,9 +1728,9 @@ st.markdown(
         .hero h1 { font-size: 1.12rem !important; }
         .diagnostic-summary { font-size: .74rem !important; }
         [data-testid="stSidebar"] .stCaption { font-size: .68rem !important; }
-        .saved-file-row {
-            padding: .55rem .62rem !important;
-            min-height: 3rem !important;
+        .saved-file-chip {
+            padding: .42rem .5rem !important;
+            min-height: 2.9rem !important;
         }
         [data-testid="stTabs"] [role="tab"],
         .stTabs [data-baseweb="tab"],
@@ -1596,9 +1746,62 @@ st.markdown(
 )
 
 
+def require_app_password() -> None:
+    """Gate public deployments when APP_PASSWORD is configured."""
+    configured_password = os.environ.get("APP_PASSWORD", "").strip()
+    if not configured_password:
+        return
+    if st.session_state.get("app_password_ok") is True:
+        return
+
+    st.markdown(
+        """
+        <div class="hero">
+          <div>
+            <div class="hero-kicker">访问验证</div>
+            <h1>零售渠道经营驾驶舱</h1>
+          </div>
+          <p>请输入访问口令后继续。上线环境建议通过 Render 环境变量 APP_PASSWORD 配置。</p>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    with st.form("app-password-form"):
+        password = st.text_input("访问口令", type="password", placeholder="输入 APP_PASSWORD")
+        submitted = st.form_submit_button("进入工作台", type="primary")
+    if submitted:
+        if hmac.compare_digest(password, configured_password):
+            st.session_state["app_password_ok"] = True
+            st.rerun()
+        st.error("访问口令不正确。")
+    st.stop()
+
+
+require_app_password()
+
+
 def _safe_upload_filename(name: str) -> str:
     cleaned = re.sub(r"[^0-9A-Za-z._\-\u4e00-\u9fff]+", "_", Path(name).name).strip("._")
     return cleaned or "uploaded_file"
+
+
+def _is_safe_upload_path(path: Path) -> bool:
+    try:
+        return path.resolve().is_relative_to(UPLOAD_STORE.resolve())
+    except (OSError, RuntimeError):
+        return False
+
+
+def _upload_validation_error(name: str, size: int) -> str | None:
+    suffix = Path(name).suffix.lower()
+    if suffix not in ALLOWED_UPLOAD_SUFFIXES:
+        allowed = "、".join(sorted(suffix.lstrip(".").upper() for suffix in ALLOWED_UPLOAD_SUFFIXES))
+        return f"{name} 已拒绝：仅支持 {allowed} 文件。"
+    if size <= 0:
+        return f"{name} 已拒绝：文件为空。"
+    if size > MAX_UPLOAD_BYTES:
+        return f"{name} 已拒绝：单文件不能超过 {_format_bytes(MAX_UPLOAD_BYTES)}。"
+    return None
 
 
 def _load_saved_uploads() -> list[dict[str, object]]:
@@ -1611,8 +1814,23 @@ def _load_saved_uploads() -> list[dict[str, object]]:
     valid: list[dict[str, object]] = []
     for record in records if isinstance(records, list) else []:
         path = Path(str(record.get("path", "")))
-        if path.exists() and path.is_file():
+        name = str(record.get("name", path.name))
+        size = int(record.get("size") or 0)
+        if (
+            path.exists()
+            and path.is_file()
+            and _is_safe_upload_path(path)
+            and _upload_validation_error(name, size) is None
+        ):
             valid.append(record)
+    if isinstance(records, list) and len(valid) != len(records):
+        if valid:
+            _write_saved_uploads(valid)
+        else:
+            try:
+                UPLOAD_MANIFEST.unlink(missing_ok=True)
+            except OSError:
+                pass
     return valid
 
 
@@ -1625,22 +1843,28 @@ def _reset_upload_widget() -> None:
     st.session_state["upload_nonce"] = int(st.session_state.get("upload_nonce", 0)) + 1
 
 
-def _persist_uploads(uploaded_files: list[object] | None) -> list[dict[str, object]]:
+def _persist_uploads(uploaded_files: list[object] | None) -> tuple[list[dict[str, object]], list[str]]:
     records = _load_saved_uploads()
     seen = {str(record.get("id")) for record in records}
     changed = False
+    errors: list[str] = []
     for uploaded in uploaded_files or []:
         content = uploaded.getvalue()
+        original_name = str(uploaded.name)
+        validation_error = _upload_validation_error(original_name, len(content))
+        if validation_error:
+            errors.append(validation_error)
+            continue
         digest = hashlib.sha256(content).hexdigest()[:16]
         if digest in seen:
             continue
-        safe_name = _safe_upload_filename(str(uploaded.name))
+        safe_name = _safe_upload_filename(original_name)
         target = UPLOAD_STORE / f"{digest}_{safe_name}"
         UPLOAD_STORE.mkdir(parents=True, exist_ok=True)
         target.write_bytes(content)
         records.append({
             "id": digest,
-            "name": str(uploaded.name),
+            "name": original_name,
             "path": str(target),
             "size": len(content),
         })
@@ -1648,7 +1872,7 @@ def _persist_uploads(uploaded_files: list[object] | None) -> list[dict[str, obje
         changed = True
     if changed:
         _write_saved_uploads(records)
-    return records
+    return records, errors
 
 
 def _delete_saved_upload(upload_id: str) -> bool:
@@ -1694,6 +1918,155 @@ def _format_bytes(size: object) -> str:
     if value >= 1024:
         return f"{value / 1024:.1f}KB"
     return f"{value:.0f}B"
+
+
+def _file_type_label(name: object) -> str:
+    suffix = Path(str(name)).suffix.lower().lstrip(".")
+    if suffix == "csv":
+        return "CSV"
+    if suffix in {"xls", "xlsx"}:
+        return "XLS"
+    if suffix in {"doc", "docx"}:
+        return "DOC"
+    return "FILE"
+
+
+def _saved_file_refs(saved_uploads: list[dict[str, object]]) -> tuple[tuple[str, str, str, int, int], ...]:
+    refs: list[tuple[str, str, str, int, int]] = []
+    for record in saved_uploads:
+        path = Path(str(record.get("path", "")))
+        if not path.exists() or not path.is_file():
+            continue
+        stat = path.stat()
+        refs.append((
+            str(record.get("id", "")),
+            str(record.get("name", path.name)),
+            str(path),
+            int(stat.st_size),
+            int(stat.st_mtime_ns),
+        ))
+    return tuple(refs)
+
+
+@st.cache_data(show_spinner=False)
+def _load_channel_dataset(
+    file_refs: tuple[tuple[str, str, str, int, int], ...],
+    use_sample: bool,
+) -> tuple[pd.DataFrame, list[dict[str, object]], list[str], str | None]:
+    loaded_files: list[dict[str, object]] = []
+    profiles: list[dict[str, object]] = []
+    errors: list[str] = []
+
+    if file_refs:
+        for _, filename, path_str, _, _ in file_refs:
+            file_path = Path(path_str)
+            try:
+                raw = read_sales_file(file_path)
+                profile = profile_file(raw, filename)
+                loaded_files.append({
+                    "frame": raw,
+                    "channel": str(profile["channel"]).strip() or Path(filename).stem,
+                    "data_type": str(profile["data_type"]),
+                    "mapping": profile["mapping"],
+                    "source_file": filename,
+                })
+                profiles.append(profile)
+            except Exception as exc:
+                errors.append(f"{filename} 读取失败：{exc}")
+    elif use_sample:
+        for path in sorted((ROOT / "data" / "sample").glob("*.csv")):
+            raw = read_sales_file(path)
+            profile = profile_file(raw, path.name)
+            loaded_files.append({
+                "frame": raw,
+                "channel": path.stem,
+                "data_type": "销售库存",
+                "mapping": profile["mapping"],
+                "source_file": path.name,
+            })
+            profiles.append({**profile, "channel": path.stem, "data_type": "销售库存"})
+
+    if not loaded_files:
+        return pd.DataFrame(), profiles, errors, None
+    try:
+        data = combine_sales_files(loaded_files)
+    except ValueError as exc:
+        return pd.DataFrame(), profiles, errors, str(exc)
+    return data, profiles, errors, None
+
+
+def render_data_intake_panel(saved_uploads: list[dict[str, object]]) -> tuple[list[dict[str, object]], bool]:
+    st.markdown(
+        f"""
+        <div class="data-intake-panel">
+          <div class="data-intake-head">
+            <div>
+              <div class="data-intake-title">数据接入</div>
+              <div class="data-intake-meta">上传渠道文件并确认识别口径，主工作区会同步刷新。</div>
+            </div>
+            <div class="data-intake-save-note">已保存 {len(saved_uploads)} 个上传文件</div>
+          </div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+    if "upload_nonce" not in st.session_state:
+        st.session_state["upload_nonce"] = 0
+    controls_left, controls_right = st.columns([1.45, .75], gap="large", vertical_alignment="top")
+    with controls_left:
+        st.markdown("<div class='data-intake-subtitle'>上传 Excel / CSV</div>", unsafe_allow_html=True)
+        uploads = st.file_uploader(
+            "上传 Excel / CSV",
+            type=["csv", "xlsx", "xls"],
+            accept_multiple_files=True,
+            key=f"uploaded-files-{st.session_state['upload_nonce']}",
+            label_visibility="collapsed",
+        )
+        saved_uploads, upload_errors = _persist_uploads(uploads)
+        for upload_error in upload_errors:
+            st.warning(upload_error)
+        if "use_sample_data" not in st.session_state:
+            st.session_state["use_sample_data"] = not bool(saved_uploads)
+    with controls_right:
+        st.markdown("<div class='data-intake-subtitle'>数据模式</div>", unsafe_allow_html=True)
+        use_sample = st.toggle("使用示例数据", key="use_sample_data")
+        if saved_uploads and st.button("清除已保存文件", type="secondary", width="stretch"):
+            _clear_saved_uploads()
+            _reset_upload_widget()
+            st.rerun()
+
+    if saved_uploads:
+        for row_start in range(0, len(saved_uploads), 3):
+            row_records = saved_uploads[row_start : row_start + 3]
+            file_cards = st.columns(3, gap="small")
+            for card, record in zip(file_cards, row_records):
+                with card:
+                    file_col, delete_col = st.columns([6, .72], gap="small", vertical_alignment="center")
+                    with file_col:
+                        filename = str(record["name"])
+                        st.markdown(
+                            "<div class='saved-file-chip'>"
+                            f"<span class='saved-file-icon'>{html.escape(_file_type_label(filename))}</span>"
+                            "<span class='saved-file-meta'>"
+                            f"<span class='saved-file-name'>{html.escape(filename)}</span>"
+                            f"<span class='saved-file-size'>{_format_bytes(record.get('size'))}</span>"
+                            "</span>"
+                            "</div>",
+                            unsafe_allow_html=True,
+                        )
+                    with delete_col:
+                        if st.button(
+                            "−",
+                            key=f"delete-upload-{record.get('id')}",
+                            help=f"删除 {record['name']}",
+                            width="stretch",
+                        ):
+                            if _delete_saved_upload(str(record.get("id"))):
+                                _reset_upload_widget()
+                            st.rerun()
+    else:
+        st.markdown("<div class='data-intake-empty'>暂无保存文件，上传后会自动保留。</div>", unsafe_allow_html=True)
+    return saved_uploads, bool(use_sample)
 
 
 def format_table(frame: pd.DataFrame) -> pd.DataFrame:
@@ -1890,6 +2263,9 @@ PIPELINE_FIELDS = [
     ("Risk", "风险点", "价格高于竞品 / 审批周期长 / 技术未完成"),
     ("Status Update", "最新进展", "已完成样品测试，等待反馈"),
 ]
+PIPELINE_DISPLAY_COLUMNS = {field: label for field, label, _ in PIPELINE_FIELDS}
+PIPELINE_INTERNAL_COLUMNS = {label: field for field, label, _ in PIPELINE_FIELDS}
+PIPELINE_DISPLAY_ORDER = [label for _, label, _ in PIPELINE_FIELDS]
 PIPELINE_STAGE_ORDER = ["初步沟通", "技术交流", "测试", "报价", "谈判", "合同/采购", "成交", "流失"]
 PIPELINE_DEFAULT_ROWS = [
     {
@@ -1941,8 +2317,14 @@ def default_pipeline_frame() -> pd.DataFrame:
     return pd.DataFrame(PIPELINE_DEFAULT_ROWS, columns=[field for field, _, _ in PIPELINE_FIELDS])
 
 
+def empty_pipeline_frame() -> pd.DataFrame:
+    return pd.DataFrame(columns=[field for field, _, _ in PIPELINE_FIELDS])
+
+
 def normalize_pipeline_frame(frame: pd.DataFrame | None) -> pd.DataFrame:
-    result = frame.copy() if frame is not None and not frame.empty else default_pipeline_frame()
+    result = frame.copy() if frame is not None else default_pipeline_frame()
+    if result.empty:
+        return empty_pipeline_frame()
     if "Contact" in result.columns and "Contact Person" not in result.columns:
         result["Contact Person"] = result["Contact"]
     for column, _, _ in PIPELINE_FIELDS:
@@ -1963,7 +2345,7 @@ def normalize_pipeline_frame(frame: pd.DataFrame | None) -> pd.DataFrame:
     meaningful_date = pd.to_datetime(result["Expected Close Date"], errors="coerce").notna()
     result = result[meaningful_text.any(axis=1) | meaningful_numeric | meaningful_date].reset_index(drop=True)
     if result.empty:
-        return default_pipeline_frame()
+        return empty_pipeline_frame()
     return result
 
 
@@ -2004,28 +2386,49 @@ def render_pipeline_cards(frame: pd.DataFrame) -> None:
 
 def render_pipeline_module() -> None:
     st.subheader("销售 Pipeline")
-    st.caption("维护重点客户、销售阶段、预计金额、成交概率和下一步动作；日报、周报、月报会同步引用这里的 Pipeline 分析。")
+    st.caption("维护重点客户、销售阶段、预计金额、成交概率和下一步动作；可选择是否写入日报、周报、月报。")
+    if "include_pipeline_in_reports" not in st.session_state:
+        st.session_state["include_pipeline_in_reports"] = False
     pipeline_frame = get_pipeline_frame()
-    render_pipeline_cards(pipeline_frame)
-    edited = st.data_editor(
-        pipeline_frame,
-        width="stretch",
-        height=210,
-        hide_index=True,
-        num_rows="dynamic",
-        column_config={
-            "Stage": st.column_config.SelectboxColumn("Stage", options=PIPELINE_STAGE_ORDER),
-            "Deal Size": st.column_config.NumberColumn("Deal Size", min_value=0, step=1000, format="¥%d"),
-            "Probability": st.column_config.NumberColumn("Probability", min_value=0.0, max_value=1.0, step=0.05, format="%.0%"),
-            "Expected Close Date": st.column_config.DateColumn("Expected Close Date"),
-        },
-        key="pipeline-editor",
+    st.toggle(
+        "将销售 Pipeline 写入日报 / 周报 / 月报",
+        key="include_pipeline_in_reports",
+        help="关闭后，报告只输出销售、采购、库存和异常分析，不显示 Pipeline 章节。",
     )
-    normalized = normalize_pipeline_frame(edited)
-    st.session_state["pipeline_records"] = normalized.to_dict("records")
+    render_pipeline_cards(pipeline_frame)
+    editor_display = pipeline_frame.rename(columns=PIPELINE_DISPLAY_COLUMNS)
+    editor_display.insert(0, "删除", False)
+    with st.form("pipeline-editor-form", clear_on_submit=False):
+        edited = st.data_editor(
+            editor_display,
+            width="stretch",
+            height=210,
+            hide_index=True,
+            num_rows="dynamic",
+            column_order=["删除", *PIPELINE_DISPLAY_ORDER],
+            column_config={
+                "删除": st.column_config.CheckboxColumn("删除", help="勾选后点击保存会删除该行"),
+                "销售阶段": st.column_config.SelectboxColumn("销售阶段", options=PIPELINE_STAGE_ORDER),
+                "预计订单金额": st.column_config.NumberColumn("预计订单金额", min_value=0, step=1000, format="¥%d"),
+                "成交概率": st.column_config.NumberColumn("成交概率", min_value=0.0, max_value=1.0, step=0.05, format="%.0%"),
+                "预计成交日期": st.column_config.DateColumn("预计成交日期"),
+            },
+            key="pipeline-editor",
+        )
+        saved = st.form_submit_button("保存 Pipeline")
+    if saved:
+        edited_frame = edited.copy()
+        if "删除" in edited_frame.columns:
+            delete_mask = edited_frame["删除"].fillna(False).astype(bool)
+            edited_frame = edited_frame.loc[~delete_mask].drop(columns=["删除"])
+        edited_frame = edited_frame.rename(columns=PIPELINE_INTERNAL_COLUMNS)
+        normalized = normalize_pipeline_frame(edited_frame)
+        st.session_state["pipeline_records"] = normalized.to_dict("records")
+        st.success("Pipeline 已保存。")
+        st.rerun()
+    normalized = pipeline_frame
 
-    left, right = st.columns([1.1, .9])
-    with left:
+    with st.container(border=True):
         st.markdown("**阶段金额分布**")
         stage_frame = (
             normalized.groupby("Stage", as_index=False)
@@ -2037,14 +2440,21 @@ def render_pipeline_module() -> None:
         if stage_frame.empty:
             st.info("当前 Pipeline 暂无预计金额。")
         else:
-            st.bar_chart(stage_frame.set_index("阶段")["预计金额"], height=210)
-    with right:
-        st.markdown("**字段说明**")
-        field_rows = "".join(
-            f"<div class='pipeline-field-row'><div>{html.escape(field)}<br><small>{html.escape(example)}</small></div><div>{html.escape(label)}</div></div>"
-            for field, label, example in PIPELINE_FIELDS
-        )
-        st.markdown(f"<div class='pipeline-field-table'>{field_rows}</div>", unsafe_allow_html=True)
+            max_amount = max(float(stage_frame["预计金额"].max()), 1.0)
+            colors = ["#4338A8", "#6558C7", "#8A7FDB", "#20A884", "#D69A3A"]
+            stage_rows = []
+            for index, (_, row) in enumerate(stage_frame.iterrows()):
+                amount = float(row["预计金额"])
+                width = amount / max_amount * 100
+                label = html.escape(str(row["阶段"]))
+                count = int(row["商机数"])
+                stage_rows.append(
+                    f'<div class="bar-row" title="{label}：¥{amount:,.0f}">'
+                    f'<div class="bar-label">{label}<br><small>{count} 个商机</small></div>'
+                    f'<div class="bar-track"><div class="bar-fill" style="width:{width:.2f}%;background:{colors[index % len(colors)]}"></div></div>'
+                    f'<div class="bar-value">¥{amount:,.0f}</div></div>'
+                )
+            st.markdown(f"<div class='bar-list'>{''.join(stage_rows)}</div>", unsafe_allow_html=True)
 
     st.subheader("本周跟进行动")
     action_rows = normalized[
@@ -2079,89 +2489,22 @@ def render_pipeline_module() -> None:
 
 with st.sidebar:
     st.markdown("<div class='sidebar-top-fill'></div>", unsafe_allow_html=True)
-    st.title("数据接入")
-    st.caption("上传渠道文件并确认识别口径，主工作区会同步刷新。")
-    if "upload_nonce" not in st.session_state:
-        st.session_state["upload_nonce"] = 0
-    uploads = st.file_uploader(
-        "上传 Excel / CSV",
-        type=["csv", "xlsx", "xls"],
-        accept_multiple_files=True,
-        key=f"uploaded-files-{st.session_state['upload_nonce']}",
-    )
-    saved_uploads = _persist_uploads(uploads)
-    if saved_uploads:
-        st.caption(f"已保存 {len(saved_uploads)} 个上传文件，刷新页面后继续保留。")
-        for record in saved_uploads:
-            file_col, delete_col = st.columns([5, 1], gap="small", vertical_alignment="center")
-            with file_col:
-                st.markdown(
-                    f"<div class='saved-file-row'><b>{html.escape(str(record['name']))}</b><br>"
-                    f"<span>{_format_bytes(record.get('size'))}</span></div>",
-                    unsafe_allow_html=True,
-                )
-            with delete_col:
-                if st.button("−", key=f"delete-upload-{record.get('id')}", help=f"删除 {record['name']}", width="stretch"):
-                    if _delete_saved_upload(str(record.get("id"))):
-                        _reset_upload_widget()
-                    st.rerun()
-        if st.button("清除已保存文件", type="secondary", width="stretch"):
-            _clear_saved_uploads()
-            _reset_upload_widget()
-            st.rerun()
-    use_sample = st.toggle("使用示例数据", value=not saved_uploads)
     st.markdown("<div class='sidebar-nav-title'>功能导航</div>", unsafe_allow_html=True)
-    active_module = st.radio(
-        "功能导航",
-        NAV_ITEMS,
-        index=NAV_ITEMS.index(st.session_state.get("active_module", "经营总览"))
-        if st.session_state.get("active_module", "经营总览") in NAV_ITEMS
-        else 0,
-        key="active_module",
-        label_visibility="collapsed",
-    )
-
-loaded_files: list[dict[str, object]] = []
-profiles: list[dict[str, object]] = []
-
-saved_uploads = _load_saved_uploads()
-
-if saved_uploads:
-    for index, record in enumerate(saved_uploads):
-        filename = str(record["name"])
-        file_path = Path(str(record["path"]))
-        try:
-            raw = read_sales_file(file_path)
-            profile = profile_file(raw, filename)
-            loaded_files.append({
-                "frame": raw,
-                "channel": str(profile["channel"]).strip() or Path(filename).stem,
-                "data_type": str(profile["data_type"]),
-                "mapping": profile["mapping"],
-                "source_file": filename,
-            })
-            profiles.append(profile)
-        except Exception as exc:
-            st.sidebar.error(f"{filename} 读取失败：{exc}")
-elif use_sample:
-    for path in sorted((ROOT / "data" / "sample").glob("*.csv")):
-        raw = read_sales_file(path)
-        profile = profile_file(raw, path.name)
-        loaded_files.append({
-            "frame": raw,
-            "channel": path.stem,
-            "data_type": "销售库存",
-            "mapping": profile["mapping"],
-            "source_file": path.name,
-        })
-        profiles.append({**profile, "channel": path.stem, "data_type": "销售库存"})
-
-try:
-    data = combine_sales_files(loaded_files)
-except ValueError as exc:
-    st.error(str(exc))
-    st.info("请检查上传文件是否包含日期、销量、SKU 等必要字段，或删除后重新上传。")
-    st.stop()
+    query_module = st.query_params.get("module")
+    active_module = query_module if query_module in NAV_ITEMS else st.session_state.get("active_module", "经营总览")
+    if active_module not in NAV_ITEMS:
+        active_module = "经营总览"
+    st.session_state["active_module"] = active_module
+    for nav_item in NAV_ITEMS:
+        if st.button(
+            nav_item,
+            key=f"sidebar-nav-{nav_item}",
+            type="primary" if nav_item == active_module else "secondary",
+            width="stretch",
+        ):
+            st.session_state["active_module"] = nav_item
+            st.query_params["module"] = nav_item
+            st.rerun()
 
 st.markdown(
     """
@@ -2194,8 +2537,24 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+saved_uploads = _load_saved_uploads()
+if active_module == "经营总览":
+    saved_uploads, use_sample = render_data_intake_panel(saved_uploads)
+else:
+    if "use_sample_data" not in st.session_state:
+        st.session_state["use_sample_data"] = not bool(saved_uploads)
+    use_sample = bool(st.session_state.get("use_sample_data", not bool(saved_uploads)))
+
+data, profiles, load_errors, combine_error = _load_channel_dataset(_saved_file_refs(saved_uploads), use_sample)
+for load_error in load_errors:
+    st.error(load_error)
+if combine_error:
+    st.error(combine_error)
+    st.info("请检查上传文件是否包含日期、销量、SKU 等必要字段，或删除后重新上传。")
+    st.stop()
+
 if data.empty:
-    st.info("请在左侧上传渠道文件，或开启示例数据。")
+    st.info("请在经营总览的数据接入区上传渠道文件，或开启示例数据。")
     st.stop()
 
 warnings = data.attrs.get("warnings", [])
@@ -2468,6 +2827,13 @@ elif active_module == "报告中心":
     )
     if covered_days < expected_days:
         st.warning(f"该周期共 {expected_days} 天，当前数据仅覆盖 {covered_days} 天，报告将明确标注数据缺口。")
+    if "include_pipeline_in_reports" not in st.session_state:
+        st.session_state["include_pipeline_in_reports"] = False
+    include_pipeline = st.toggle(
+        "将销售 Pipeline 写入本次报告",
+        key="include_pipeline_in_reports",
+        help="关闭后，Word 和页面报告不会出现 Pipeline 章节。",
+    )
     weather_rows, weather_errors = cached_regional_weather()
     automatic_weather_note = format_weather_note(weather_rows)
     st.markdown("**上海 / 苏州自动天气**")
@@ -2500,8 +2866,10 @@ elif active_module == "报告中心":
         "weather_note": weather_note,
         "holiday_note": holiday_note,
         "activity_note": activity_note,
-        "pipeline_records": pipeline_report_records(),
+        "include_pipeline": include_pipeline,
     }
+    if include_pipeline:
+        report_context["pipeline_records"] = pipeline_report_records()
     report_text = generate_period_report(filtered, report_type, report_date, report_context)
     word_bytes = export_period_report_docx(filtered, report_type, report_date, report_context)
     report_tables = period_report_tables(filtered, report_type, report_date)
