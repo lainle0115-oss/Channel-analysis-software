@@ -57,3 +57,16 @@ def test_admin_user_summary_includes_upload_counts(tmp_path):
     assert rows[owner.email]["role"] == "admin"
     assert rows[user.email]["upload_count"] == 1
     assert rows[user.email]["upload_bytes"] == 1234
+
+
+def test_user_settings_round_trip(tmp_path):
+    store = make_store(tmp_path)
+    user = store.register_user("pipeline@example.com", "strong-pass-1", "Pipeline")
+
+    assert store.get_user_setting(user.id, "pipeline_records") is None
+
+    store.set_user_setting(user.id, "pipeline_records", '[{"name":"盒马"}]')
+    assert store.get_user_setting(user.id, "pipeline_records") == '[{"name":"盒马"}]'
+
+    store.set_user_setting(user.id, "pipeline_records", "[]")
+    assert store.get_user_setting(user.id, "pipeline_records") == "[]"

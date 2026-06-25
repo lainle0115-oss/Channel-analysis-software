@@ -131,6 +131,19 @@ class AuthStore:
                 )
                 """,
             )
+            self._execute(
+                conn,
+                """
+                CREATE TABLE IF NOT EXISTS user_settings (
+                    user_id TEXT NOT NULL,
+                    key TEXT NOT NULL,
+                    value TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY (user_id, key),
+                    FOREIGN KEY(user_id) REFERENCES users(id)
+                )
+                """,
+            )
             self._execute(conn, "CREATE INDEX IF NOT EXISTS idx_uploads_user_id ON uploads(user_id)")
             self._execute(conn, "CREATE INDEX IF NOT EXISTS idx_uploads_created_at ON uploads(created_at)")
             self._ensure_admin_from_env(conn)
@@ -347,3 +360,41 @@ class AuthStore:
             )
             return [dict(row) for row in rows]
 
+    def get_user_setting(self, user_id: str, key: str) -> str | None:
+        with self.connect() as conn:
+            row = self._execute(
+                conn,
+                f"""
+                SELECT value FROM user_settings
+                WHERE user_id = {self._placeholder()} AND key = {self._placeholder()}
+                """,
+                (user_id, key),
+            ).fetchone()
+            if row is None:
+                return None
+            return str(row["value"])
+
+    def set_user_setting(self, user_id: str, key: str, value: str) -> None:
+        with self.connect() as conn:
+            if self.backend == "postgres":
+                self._execute(
+                    conn,
+                    """
+                    INSERT INTO user_settings (user_id, key, value, updated_at)
+                    VALUES (%s, %s, %s, %s)
+                    ON CONFLICT (user_id, key)
+                    DO UPDATE SET value = EXCLUDED.value, updated_at = EXCLUDED.updated_at
+                    """,
+                    (user_id, key, value, utc_now()),
+                )
+            else:
+                self._execute(
+                    conn,
+                    """
+                    INSERT INTO user_settings (user_id, key, value, updated_at)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(user_id, key)
+                    DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at
+                    """,
+                    (user_id, key, value, utc_now()),
+                )

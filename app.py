@@ -4,6 +4,7 @@ import html
 import json
 import os
 import re
+import secrets
 import sys
 
 import pandas as pd
@@ -42,6 +43,7 @@ from retail_assistant.weather import fetch_regional_weather, format_weather_note
 
 ROOT = Path(__file__).parent
 UPLOAD_STORE = ROOT / ".streamlit" / "uploaded_files"
+GUEST_UPLOAD_STORE = ROOT / ".streamlit" / "guest_uploads"
 UPLOAD_MANIFEST = UPLOAD_STORE / "manifest.json"
 ALLOWED_UPLOAD_SUFFIXES = {".csv", ".xls", ".xlsx"}
 DEFAULT_MAX_UPLOAD_BYTES = 200 * 1024 * 1024
@@ -832,6 +834,29 @@ st.markdown(
         background: var(--pill-bg);
         border: 1px solid var(--pill-border);
         box-shadow: inset 0 1px 0 rgba(255,255,255,.18);
+    }
+    .topbar-auth-pill {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        min-width: 7.6rem;
+        min-height: 2.1rem;
+        padding: .3rem .85rem;
+        border-radius: 999px;
+        color: #ffffff !important;
+        text-decoration: none !important;
+        font-weight: 780;
+        letter-spacing: -.01em;
+        background: rgba(255,255,255,.16);
+        border: 1px solid rgba(255,255,255,.32);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 10px 26px rgba(23, 16, 92, .18);
+        backdrop-filter: saturate(180%) blur(16px);
+        transition: transform .16s ease, background .16s ease, box-shadow .16s ease;
+    }
+    .topbar-auth-pill:hover {
+        background: rgba(255,255,255,.22);
+        transform: translateY(-1px);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.28), 0 14px 32px rgba(23, 16, 92, .24);
     }
     .hero {
         display: grid;
@@ -1764,30 +1789,39 @@ def _session_user() -> AuthUser | None:
     return user
 
 
-def require_account_login() -> AuthUser:
-    """Require a registered account before showing any customer data."""
+def _close_auth_query() -> None:
+    try:
+        if "auth" in st.query_params:
+            del st.query_params["auth"]
+    except Exception:
+        pass
+
+
+@st.dialog("账号登录 / 注册")
+def render_account_dialog() -> None:
+    """Show account actions without blocking guest usage."""
     try:
         store = get_auth_store()
     except AuthStoreError as exc:
         st.error(str(exc))
-        st.stop()
+        return
 
     current = _session_user()
     if current is not None:
-        return current
+        st.success(f"已登录：{current.email}")
+        if current.is_admin:
+            st.caption("权限：管理员")
+        st.caption("登录账号会保留上传文件、Pipeline 和报告设置；游客数据关闭会话后不保留。")
+        if st.button("退出登录", width="stretch"):
+            st.session_state.pop("current_user", None)
+            _close_auth_query()
+            st.rerun()
+        if st.button("关闭", width="stretch"):
+            _close_auth_query()
+            st.rerun()
+        return
 
-    st.markdown(
-        """
-        <div class="hero auth-hero">
-          <div>
-            <div class="hero-kicker">账号登录</div>
-            <h1>零售渠道经营驾驶舱</h1>
-          </div>
-          <p>请登录后继续。每个账号只看到自己的上传文件；管理员可查看用户与上传概览。</p>
-        </div>
-        """,
-        unsafe_allow_html=True,
-    )
+    st.caption("不登录也可以直接使用。登录或注册后，上传文件、Pipeline 和报告设置会保存在账号下。")
     login_tab, register_tab = st.tabs(["登录", "注册"])
     with login_tab:
         with st.form("account-login-form", clear_on_submit=False):
@@ -1800,6 +1834,8 @@ def require_account_login() -> AuthUser:
                 st.error("邮箱或密码不正确。")
             else:
                 st.session_state["current_user"] = user.to_session()
+                st.session_state["promote_guest_state_to_user_id"] = user.id
+                _close_auth_query()
                 st.rerun()
 
     with register_tab:
@@ -1815,13 +1851,17 @@ def require_account_login() -> AuthUser:
                 st.error(str(exc))
             else:
                 st.session_state["current_user"] = user.to_session()
+                st.session_state["promote_guest_state_to_user_id"] = user.id
                 st.success("账号已创建。")
+                _close_auth_query()
                 st.rerun()
+
     st.info("如果 Render 已配置 ADMIN_EMAIL / ADMIN_PASSWORD，请直接用该管理员账号登录。否则第一个注册账号会自动成为管理员。")
-    st.stop()
 
 
-current_user = require_account_login()
+current_user = _session_user()
+if st.query_params.get("auth") == "1":
+    render_account_dialog()
 
 
 def _safe_upload_filename(name: str) -> str:
@@ -1829,13 +1869,34 @@ def _safe_upload_filename(name: str) -> str:
     return cleaned or "uploaded_file"
 
 
+def _guest_session_id() -> str:
+    if "guest_session_id" not in st.session_state:
+        st.session_state["guest_session_id"] = secrets.token_hex(12)
+    return str(st.session_state["guest_session_id"])
+
+
 def _user_upload_dir(user_id: str) -> Path:
     return UPLOAD_STORE / user_id
 
 
-def _is_safe_upload_path(path: Path, user_id: str | None = None) -> bool:
+def _active_upload_dir(user: AuthUser | None) -> Path:
+    if user is not None:
+        return _user_upload_dir(user.id)
+    return GUEST_UPLOAD_STORE / _guest_session_id()
+
+
+def _is_safe_upload_path(
+    path: Path,
+    user_id: str | None = None,
+    guest_session_id: str | None = None,
+) -> bool:
     try:
-        root = _user_upload_dir(user_id).resolve() if user_id else UPLOAD_STORE.resolve()
+        if user_id:
+            root = _user_upload_dir(user_id).resolve()
+        elif guest_session_id:
+            root = (GUEST_UPLOAD_STORE / guest_session_id).resolve()
+        else:
+            root = UPLOAD_STORE.resolve()
         return path.resolve().is_relative_to(root)
     except (OSError, RuntimeError):
         return False
@@ -1906,7 +1967,28 @@ def _migrate_legacy_uploads_for_user(user: AuthUser) -> None:
     st.session_state[session_key] = True
 
 
-def _load_saved_uploads(user: AuthUser) -> list[dict[str, object]]:
+def _load_guest_uploads() -> list[dict[str, object]]:
+    guest_id = _guest_session_id()
+    records = st.session_state.get("guest_upload_records", [])
+    valid: list[dict[str, object]] = []
+    for record in records if isinstance(records, list) else []:
+        path = Path(str(record.get("path", "")))
+        name = str(record.get("name", path.name))
+        size = int(record.get("size") or 0)
+        if (
+            path.exists()
+            and path.is_file()
+            and _is_safe_upload_path(path, guest_session_id=guest_id)
+            and _upload_validation_error(name, size) is None
+        ):
+            valid.append(record)
+    st.session_state["guest_upload_records"] = valid
+    return valid
+
+
+def _load_saved_uploads(user: AuthUser | None) -> list[dict[str, object]]:
+    if user is None:
+        return _load_guest_uploads()
     _migrate_legacy_uploads_for_user(user)
     store = get_auth_store()
     records = store.list_uploads(user.id)
@@ -1927,8 +2009,8 @@ def _load_saved_uploads(user: AuthUser) -> list[dict[str, object]]:
     return valid
 
 
-def _persist_uploads(uploaded_files: list[object] | None, user: AuthUser) -> tuple[list[dict[str, object]], list[str]]:
-    store = get_auth_store()
+def _persist_uploads(uploaded_files: list[object] | None, user: AuthUser | None) -> tuple[list[dict[str, object]], list[str]]:
+    store = get_auth_store() if user is not None else None
     records = _load_saved_uploads(user)
     seen = {str(record.get("name")) + ":" + str(record.get("size")) for record in records}
     errors: list[str] = []
@@ -1944,7 +2026,7 @@ def _persist_uploads(uploaded_files: list[object] | None, user: AuthUser) -> tup
         if identity in seen:
             continue
         safe_name = _safe_upload_filename(original_name)
-        target_dir = _user_upload_dir(user.id)
+        target_dir = _active_upload_dir(user)
         target_dir.mkdir(parents=True, exist_ok=True)
         target = target_dir / f"{digest}_{safe_name}"
         counter = 1
@@ -1952,12 +2034,41 @@ def _persist_uploads(uploaded_files: list[object] | None, user: AuthUser) -> tup
             target = target_dir / f"{digest}_{counter}_{safe_name}"
             counter += 1
         target.write_bytes(content)
-        records.append(store.add_upload(user.id, original_name, str(target), len(content)))
+        if user is not None and store is not None:
+            records.append(store.add_upload(user.id, original_name, str(target), len(content)))
+        else:
+            records.append({
+                "id": secrets.token_hex(16),
+                "user_id": "guest",
+                "name": original_name,
+                "path": str(target),
+                "size": len(content),
+                "created_at": "",
+            })
+            st.session_state["guest_upload_records"] = records
         seen.add(identity)
     return _load_saved_uploads(user), errors
 
 
-def _delete_saved_upload(upload_id: str, user: AuthUser) -> bool:
+def _delete_saved_upload(upload_id: str, user: AuthUser | None) -> bool:
+    if user is None:
+        guest_id = _guest_session_id()
+        records = _load_guest_uploads()
+        kept: list[dict[str, object]] = []
+        deleted = False
+        for record in records:
+            if str(record.get("id")) != upload_id:
+                kept.append(record)
+                continue
+            path = Path(str(record.get("path", "")))
+            if _is_safe_upload_path(path, guest_session_id=guest_id):
+                try:
+                    path.unlink(missing_ok=True)
+                except OSError:
+                    pass
+            deleted = True
+        st.session_state["guest_upload_records"] = kept
+        return deleted
     store = get_auth_store()
     record = store.delete_upload(upload_id, user.id, is_admin=user.is_admin)
     if not record:
@@ -1971,7 +2082,19 @@ def _delete_saved_upload(upload_id: str, user: AuthUser) -> bool:
     return True
 
 
-def _clear_saved_uploads(user: AuthUser) -> None:
+def _clear_saved_uploads(user: AuthUser | None) -> None:
+    if user is None:
+        guest_id = _guest_session_id()
+        for record in _load_guest_uploads():
+            path = Path(str(record.get("path", "")))
+            if not _is_safe_upload_path(path, guest_session_id=guest_id):
+                continue
+            try:
+                path.unlink(missing_ok=True)
+            except OSError:
+                pass
+        st.session_state["guest_upload_records"] = []
+        return
     store = get_auth_store()
     for record in store.clear_uploads(user.id):
         path = Path(str(record.get("path", "")))
@@ -1981,6 +2104,43 @@ def _clear_saved_uploads(user: AuthUser) -> None:
             path.unlink(missing_ok=True)
         except OSError:
             pass
+
+
+def _promote_guest_uploads_to_user(user: AuthUser) -> None:
+    guest_id = _guest_session_id()
+    guest_records = _load_guest_uploads()
+    if not guest_records:
+        return
+    store = get_auth_store()
+    existing = {
+        str(record.get("name")) + ":" + str(record.get("size"))
+        for record in store.list_uploads(user.id)
+    }
+    for record in guest_records:
+        source = Path(str(record.get("path", "")))
+        name = str(record.get("name", source.name))
+        size = int(record.get("size") or 0)
+        if not source.exists() or not _is_safe_upload_path(source, guest_session_id=guest_id):
+            continue
+        identity = f"{name}:{size}"
+        if identity in existing:
+            continue
+        try:
+            content = source.read_bytes()
+        except OSError:
+            continue
+        digest = hashlib.sha256(content).hexdigest()[:16]
+        target_dir = _user_upload_dir(user.id)
+        target_dir.mkdir(parents=True, exist_ok=True)
+        target = target_dir / f"{digest}_{_safe_upload_filename(name)}"
+        counter = 1
+        while target.exists():
+            target = target_dir / f"{digest}_{counter}_{_safe_upload_filename(name)}"
+            counter += 1
+        target.write_bytes(content)
+        store.add_upload(user.id, name, str(target), len(content))
+        existing.add(identity)
+    _clear_saved_uploads(None)
 
 
 def _format_bytes(size: object) -> str:
@@ -2067,16 +2227,26 @@ def _load_channel_dataset(
     return data, profiles, errors, None
 
 
-def render_data_intake_panel(saved_uploads: list[dict[str, object]], user: AuthUser) -> tuple[list[dict[str, object]], bool]:
+def render_data_intake_panel(saved_uploads: list[dict[str, object]], user: AuthUser | None) -> tuple[list[dict[str, object]], bool]:
+    save_note = (
+        f"已保存 {len(saved_uploads)} 个上传文件"
+        if user is not None
+        else f"游客临时文件 {len(saved_uploads)} 个"
+    )
+    meta_note = (
+        "已登录，上传文件会保留在当前账号下。"
+        if user is not None
+        else "游客可直接分析；登录/注册后才会跨刷新保留上传文件和 Pipeline。"
+    )
     st.markdown(
         f"""
         <div class="data-intake-panel">
           <div class="data-intake-head">
             <div>
               <div class="data-intake-title">数据接入</div>
-              <div class="data-intake-meta">上传渠道文件并确认识别口径，主工作区会同步刷新。</div>
+              <div class="data-intake-meta">{html.escape(meta_note)}</div>
             </div>
-            <div class="data-intake-save-note">已保存 {len(saved_uploads)} 个上传文件</div>
+            <div class="data-intake-save-note">{html.escape(save_note)}</div>
           </div>
         </div>
         """,
@@ -2137,7 +2307,8 @@ def render_data_intake_panel(saved_uploads: list[dict[str, object]], user: AuthU
                                 _reset_upload_widget()
                             st.rerun()
     else:
-        st.markdown("<div class='data-intake-empty'>暂无保存文件，上传后会自动保留。</div>", unsafe_allow_html=True)
+        empty_note = "暂无保存文件，上传后会保存在账号下。" if user is not None else "暂无临时文件，游客上传不会长期保留。"
+        st.markdown(f"<div class='data-intake-empty'>{html.escape(empty_note)}</div>", unsafe_allow_html=True)
     return saved_uploads, bool(use_sample)
 
 
@@ -2422,19 +2593,82 @@ def normalize_pipeline_frame(frame: pd.DataFrame | None) -> pd.DataFrame:
     return result
 
 
-def get_pipeline_frame() -> pd.DataFrame:
-    if "pipeline_records" not in st.session_state:
-        st.session_state["pipeline_records"] = default_pipeline_frame().to_dict("records")
-    return normalize_pipeline_frame(pd.DataFrame(st.session_state["pipeline_records"]))
+def _user_state_key(name: str, user: AuthUser | None) -> str:
+    return f"{name}_{user.id}" if user is not None else f"{name}_guest"
 
 
-def pipeline_report_records() -> list[dict[str, object]]:
-    frame = get_pipeline_frame()
+def _serializable_pipeline_records(frame: pd.DataFrame) -> list[dict[str, object]]:
     result = frame.copy()
     result["Expected Close Date"] = result["Expected Close Date"].map(
         lambda value: "" if pd.isna(value) else str(value)
     )
     return result.to_dict("records")
+
+
+def _load_pipeline_records_for_user(user: AuthUser | None) -> list[dict[str, object]]:
+    if user is None:
+        return default_pipeline_frame().to_dict("records")
+    raw = get_auth_store().get_user_setting(user.id, "pipeline_records")
+    if not raw:
+        return default_pipeline_frame().to_dict("records")
+    try:
+        records = json.loads(raw)
+    except json.JSONDecodeError:
+        return default_pipeline_frame().to_dict("records")
+    return records if isinstance(records, list) else default_pipeline_frame().to_dict("records")
+
+
+def get_pipeline_frame(user: AuthUser | None) -> pd.DataFrame:
+    state_key = _user_state_key("pipeline_records", user)
+    if state_key not in st.session_state:
+        st.session_state[state_key] = _load_pipeline_records_for_user(user)
+    return normalize_pipeline_frame(pd.DataFrame(st.session_state[state_key]))
+
+
+def save_pipeline_frame(user: AuthUser | None, frame: pd.DataFrame) -> None:
+    records = _serializable_pipeline_records(frame)
+    st.session_state[_user_state_key("pipeline_records", user)] = records
+    if user is not None:
+        get_auth_store().set_user_setting(user.id, "pipeline_records", json.dumps(records, ensure_ascii=False))
+
+
+def get_include_pipeline_setting(user: AuthUser | None) -> bool:
+    state_key = _user_state_key("include_pipeline_in_reports", user)
+    if state_key in st.session_state:
+        return bool(st.session_state[state_key])
+    value = False
+    if user is not None:
+        raw = get_auth_store().get_user_setting(user.id, "include_pipeline_in_reports")
+        value = raw == "true"
+    st.session_state[state_key] = value
+    return value
+
+
+def persist_include_pipeline_setting(user: AuthUser | None, value: bool) -> None:
+    if user is not None:
+        get_auth_store().set_user_setting(user.id, "include_pipeline_in_reports", "true" if value else "false")
+
+
+def pipeline_report_records(user: AuthUser | None) -> list[dict[str, object]]:
+    return _serializable_pipeline_records(get_pipeline_frame(user))
+
+
+def promote_guest_state_if_needed(user: AuthUser | None) -> None:
+    if user is None:
+        return
+    if st.session_state.get("promote_guest_state_to_user_id") != user.id:
+        return
+    _promote_guest_uploads_to_user(user)
+    guest_pipeline_key = _user_state_key("pipeline_records", None)
+    if guest_pipeline_key in st.session_state:
+        save_pipeline_frame(user, normalize_pipeline_frame(pd.DataFrame(st.session_state[guest_pipeline_key])))
+        st.session_state.pop(guest_pipeline_key, None)
+    guest_include_key = _user_state_key("include_pipeline_in_reports", None)
+    if guest_include_key in st.session_state:
+        st.session_state[_user_state_key("include_pipeline_in_reports", user)] = bool(st.session_state[guest_include_key])
+        persist_include_pipeline_setting(user, bool(st.session_state[guest_include_key]))
+        st.session_state.pop(guest_include_key, None)
+    st.session_state.pop("promote_guest_state_to_user_id", None)
 
 
 def render_pipeline_cards(frame: pd.DataFrame) -> None:
@@ -2457,17 +2691,19 @@ def render_pipeline_cards(frame: pd.DataFrame) -> None:
     st.markdown(card_html, unsafe_allow_html=True)
 
 
-def render_pipeline_module() -> None:
+def render_pipeline_module(user: AuthUser | None) -> None:
     st.subheader("销售 Pipeline")
     st.caption("维护重点客户、销售阶段、预计金额、成交概率和下一步动作；可选择是否写入日报、周报、月报。")
-    if "include_pipeline_in_reports" not in st.session_state:
-        st.session_state["include_pipeline_in_reports"] = False
-    pipeline_frame = get_pipeline_frame()
-    st.toggle(
+    pipeline_frame = get_pipeline_frame(user)
+    include_key = _user_state_key("include_pipeline_in_reports", user)
+    if include_key not in st.session_state:
+        st.session_state[include_key] = get_include_pipeline_setting(user)
+    include_pipeline = st.toggle(
         "将销售 Pipeline 写入日报 / 周报 / 月报",
-        key="include_pipeline_in_reports",
+        key=include_key,
         help="关闭后，报告只输出销售、采购、库存和异常分析，不显示 Pipeline 章节。",
     )
+    persist_include_pipeline_setting(user, bool(include_pipeline))
     render_pipeline_cards(pipeline_frame)
     editor_display = pipeline_frame.rename(columns=PIPELINE_DISPLAY_COLUMNS)
     editor_display.insert(0, "删除", False)
@@ -2496,7 +2732,7 @@ def render_pipeline_module() -> None:
             edited_frame = edited_frame.loc[~delete_mask].drop(columns=["删除"])
         edited_frame = edited_frame.rename(columns=PIPELINE_INTERNAL_COLUMNS)
         normalized = normalize_pipeline_frame(edited_frame)
-        st.session_state["pipeline_records"] = normalized.to_dict("records")
+        save_pipeline_frame(user, normalized)
         st.success("Pipeline 已保存。")
         st.rerun()
     normalized = pipeline_frame
@@ -2600,10 +2836,13 @@ def render_admin_module(user: AuthUser) -> None:
         st.dataframe(uploads_display, width="stretch", hide_index=True)
 
 
+promote_guest_state_if_needed(current_user)
+
+
 with st.sidebar:
     st.markdown("<div class='sidebar-top-fill'></div>", unsafe_allow_html=True)
     st.markdown("<div class='sidebar-nav-title'>功能导航</div>", unsafe_allow_html=True)
-    nav_items = [*NAV_ITEMS, *([ADMIN_NAV_ITEM] if current_user.is_admin else [])]
+    nav_items = [*NAV_ITEMS, *([ADMIN_NAV_ITEM] if current_user is not None and current_user.is_admin else [])]
     query_module = st.query_params.get("module")
     active_module = query_module if query_module in nav_items else st.session_state.get("active_module", "经营总览")
     if active_module not in nav_items:
@@ -2619,16 +2858,11 @@ with st.sidebar:
             st.session_state["active_module"] = nav_item
             st.query_params["module"] = nav_item
             st.rerun()
-    st.markdown("---")
-    st.caption(f"当前账号：{current_user.email}")
-    if current_user.is_admin:
-        st.caption("权限：管理员")
-    if st.button("退出登录", key="logout", width="stretch"):
-        st.session_state.pop("current_user", None)
-        st.rerun()
 
+auth_label = "注册 / 登录" if current_user is None else ("管理员账号" if current_user.is_admin else "我的账号")
+auth_hint = "登录后保存上传和 Pipeline" if current_user is None else html.escape(current_user.email)
 st.markdown(
-    """
+    f"""
     <div class="business-topbar">
       <div class="business-brand">
         <span class="business-brand-mark">渠</span>
@@ -2636,9 +2870,7 @@ st.markdown(
         <small>销售与库存分析系统</small>
       </div>
       <div class="business-meta">
-        <span>数据口径中心</span>
-        <span>报告中心</span>
-        <span class="live">本地分析工作台</span>
+        <a class="topbar-auth-pill" href="?auth=1" title="{auth_hint}">{html.escape(auth_label)}</a>
       </div>
     </div>
     """,
@@ -2659,7 +2891,10 @@ st.markdown(
 )
 
 if active_module == ADMIN_NAV_ITEM:
-    render_admin_module(current_user)
+    if current_user is None:
+        st.warning("请先登录管理员账号。")
+    else:
+        render_admin_module(current_user)
     st.stop()
 
 saved_uploads = _load_saved_uploads(current_user)
@@ -2921,7 +3156,7 @@ elif active_module == "SKU 分析":
         )
 
 elif active_module == "销售 Pipeline":
-    render_pipeline_module()
+    render_pipeline_module(current_user)
 
 elif active_module == "报告中心":
     st.subheader("经营报告中心")
@@ -2952,13 +3187,15 @@ elif active_module == "报告中心":
     )
     if covered_days < expected_days:
         st.warning(f"该周期共 {expected_days} 天，当前数据仅覆盖 {covered_days} 天，报告将明确标注数据缺口。")
-    if "include_pipeline_in_reports" not in st.session_state:
-        st.session_state["include_pipeline_in_reports"] = False
+    include_key = _user_state_key("include_pipeline_in_reports", current_user)
+    if include_key not in st.session_state:
+        st.session_state[include_key] = get_include_pipeline_setting(current_user)
     include_pipeline = st.toggle(
         "将销售 Pipeline 写入本次报告",
-        key="include_pipeline_in_reports",
+        key=include_key,
         help="关闭后，Word 和页面报告不会出现 Pipeline 章节。",
     )
+    persist_include_pipeline_setting(current_user, bool(include_pipeline))
     weather_rows, weather_errors = cached_regional_weather()
     automatic_weather_note = format_weather_note(weather_rows)
     st.markdown("**上海 / 苏州自动天气**")
@@ -2994,7 +3231,7 @@ elif active_module == "报告中心":
         "include_pipeline": include_pipeline,
     }
     if include_pipeline:
-        report_context["pipeline_records"] = pipeline_report_records()
+        report_context["pipeline_records"] = pipeline_report_records(current_user)
     report_text = generate_period_report(filtered, report_type, report_date, report_context)
     word_bytes = export_period_report_docx(filtered, report_type, report_date, report_context)
     report_tables = period_report_tables(filtered, report_type, report_date)
