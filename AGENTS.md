@@ -11,7 +11,7 @@ pytest -q
 ./scripts/restart_app.sh
 ```
 
-The local app is expected at `http://127.0.0.1:8501/`.
+The local app is expected at `http://127.0.0.1:8502/`.
 
 Automatic file watching is disabled for stability. After code changes, run
 `./scripts/restart_app.sh` before browser verification. Runtime logs are written
@@ -38,7 +38,7 @@ to `logs/streamlit.log`.
 
 - Run `pytest -q` and `python -m py_compile app.py src/retail_assistant/*.py`.
 - For UI changes, verify the rendered app in the browser at
-  `http://127.0.0.1:8501/`.
+  `http://127.0.0.1:8502/`.
 - Confirm the hero is not covered by the Streamlit header, uploader controls are
   readable, charts render, and empty states are explicit.
 - For inventory changes, reconcile KPI, channel summary, SKU summary, report

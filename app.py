@@ -858,6 +858,70 @@ st.markdown(
         transform: translateY(-1px);
         box-shadow: inset 0 1px 0 rgba(255,255,255,.28), 0 14px 32px rgba(23, 16, 92, .24);
     }
+    .st-key-auth_topbar_controls {
+        position: fixed !important;
+        top: 9px !important;
+        right: 1.5rem !important;
+        z-index: 1000003 !important;
+        width: min(12.5rem, calc(100vw - 2rem)) !important;
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: center !important;
+        gap: .18rem !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+    .st-key-auth_topbar_controls [data-testid="stButton"] {
+        width: 100% !important;
+        align-self: center !important;
+    }
+    .st-key-auth_topbar_controls button {
+        width: 100% !important;
+        min-width: 0 !important;
+        min-height: 2rem !important;
+        padding: .28rem .82rem !important;
+        border-radius: 999px !important;
+        color: #ffffff !important;
+        font-weight: 780 !important;
+        letter-spacing: 0 !important;
+        background: rgba(255,255,255,.16) !important;
+        border: 1px solid rgba(255,255,255,.32) !important;
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.22), 0 10px 26px rgba(23, 16, 92, .18) !important;
+        backdrop-filter: saturate(180%) blur(16px) !important;
+        transition: transform .16s ease, background .16s ease, box-shadow .16s ease !important;
+    }
+    .st-key-auth_topbar_controls button:hover {
+        background: rgba(255,255,255,.22) !important;
+        transform: translateY(-1px);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.28), 0 14px 32px rgba(23, 16, 92, .24) !important;
+    }
+    .st-key-auth_topbar_controls button p {
+        color: #ffffff !important;
+        font-size: .86rem !important;
+        font-weight: 780 !important;
+        line-height: 1 !important;
+        white-space: nowrap !important;
+    }
+    .topbar-auth-hint {
+        width: 100%;
+        color: rgba(255,255,255,.78);
+        font-size: .62rem;
+        font-weight: 620;
+        line-height: 1.12;
+        text-align: center;
+        text-shadow: 0 1px 8px rgba(36, 19, 120, .22);
+        pointer-events: none;
+        white-space: nowrap;
+    }
+    @media (max-width: 760px) {
+        .st-key-auth_topbar_controls {
+            right: .75rem !important;
+            width: 9rem !important;
+        }
+        .topbar-auth-hint {
+            display: none !important;
+        }
+    }
     .hero {
         display: grid;
         grid-template-columns: minmax(230px, .75fr) minmax(420px, 1.7fr);
@@ -1789,7 +1853,7 @@ def _session_user() -> AuthUser | None:
     return user
 
 
-def _close_auth_query() -> None:
+def _clear_auth_query() -> None:
     try:
         if "auth" in st.query_params:
             del st.query_params["auth"]
@@ -1797,7 +1861,12 @@ def _close_auth_query() -> None:
         pass
 
 
-@st.dialog("账号登录 / 注册")
+def _close_auth_dialog() -> None:
+    st.session_state["show_auth_dialog"] = False
+    _clear_auth_query()
+
+
+@st.dialog("账号登录 / 注册", on_dismiss=_close_auth_dialog)
 def render_account_dialog() -> None:
     """Show account actions without blocking guest usage."""
     try:
@@ -1814,10 +1883,10 @@ def render_account_dialog() -> None:
         st.caption("登录账号会保留上传文件、Pipeline 和报告设置；游客数据关闭会话后不保留。")
         if st.button("退出登录", width="stretch"):
             st.session_state.pop("current_user", None)
-            _close_auth_query()
+            _close_auth_dialog()
             st.rerun()
         if st.button("关闭", width="stretch"):
-            _close_auth_query()
+            _close_auth_dialog()
             st.rerun()
         return
 
@@ -1835,7 +1904,7 @@ def render_account_dialog() -> None:
             else:
                 st.session_state["current_user"] = user.to_session()
                 st.session_state["promote_guest_state_to_user_id"] = user.id
-                _close_auth_query()
+                _close_auth_dialog()
                 st.rerun()
 
     with register_tab:
@@ -1853,14 +1922,15 @@ def render_account_dialog() -> None:
                 st.session_state["current_user"] = user.to_session()
                 st.session_state["promote_guest_state_to_user_id"] = user.id
                 st.success("账号已创建。")
-                _close_auth_query()
+                _close_auth_dialog()
                 st.rerun()
-
-    st.info("如果 Render 已配置 ADMIN_EMAIL / ADMIN_PASSWORD，请直接用该管理员账号登录。否则第一个注册账号会自动成为管理员。")
 
 
 current_user = _session_user()
 if st.query_params.get("auth") == "1":
+    st.session_state["show_auth_dialog"] = True
+    _clear_auth_query()
+if st.session_state.get("show_auth_dialog"):
     render_account_dialog()
 
 
@@ -2869,13 +2939,16 @@ st.markdown(
         <span>零售渠道经营驾驶舱</span>
         <small>销售与库存分析系统</small>
       </div>
-      <div class="business-meta">
-        <a class="topbar-auth-pill" href="?auth=1" title="{auth_hint}">{html.escape(auth_label)}</a>
-      </div>
+      <div class="business-meta"></div>
     </div>
     """,
     unsafe_allow_html=True,
 )
+with st.container(key="auth_topbar_controls"):
+    if st.button(auth_label, key="topbar-auth-button", help=auth_hint, width="stretch"):
+        st.session_state["show_auth_dialog"] = True
+        st.rerun()
+    st.markdown(f"<div class='topbar-auth-hint'>{html.escape(auth_hint)}</div>", unsafe_allow_html=True)
 
 st.markdown(
     """
