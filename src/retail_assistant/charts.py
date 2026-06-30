@@ -44,6 +44,9 @@ def trend_chart(frame: pd.DataFrame, dimension: str, metric: str, height: int = 
     if chart_data.empty:
         return None
 
+    numeric_metric = pd.to_numeric(chart_data[metric_label], errors="coerce").fillna(0)
+    domain_min = min(0.0, float(numeric_metric.min()) * 1.1)
+    domain_max = max(1.0, float(numeric_metric.max()) * 1.1)
     selection = alt.selection_point(fields=[label], bind="legend")
     legend = (
         alt.Legend(
@@ -66,7 +69,7 @@ def trend_chart(frame: pd.DataFrame, dimension: str, metric: str, height: int = 
         )
     )
     encoding = {
-        "y": alt.Y(f"{metric_label}:Q", title=metric_label),
+        "y": alt.Y(f"{metric_label}:Q", title=metric_label, stack=None, scale=alt.Scale(domain=[domain_min, domain_max])),
         "color": alt.Color(
             f"{label}:N",
             scale=alt.Scale(range=CHART_COLORS),

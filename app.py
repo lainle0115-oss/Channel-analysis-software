@@ -27,7 +27,8 @@ from retail_assistant.charts import (  # noqa: E402
     trend_chart,
 )
 from retail_assistant.normalize import (  # noqa: E402
-    combine_sales_files,
+    combine_normalized_frames,
+    normalize_sales_data,
     profile_file,
     read_sales_file,
 )
@@ -51,6 +52,11 @@ try:
     MAX_UPLOAD_BYTES = int(os.environ.get("MAX_UPLOAD_BYTES", DEFAULT_MAX_UPLOAD_BYTES))
 except ValueError:
     MAX_UPLOAD_BYTES = DEFAULT_MAX_UPLOAD_BYTES
+UPLOAD_KIND_LABELS = {
+    "sales": "销售数据",
+    "purchase": "采购数据",
+    "auto": "自动识别",
+}
 
 st.set_page_config(page_title="零售渠道经营驾驶舱", page_icon="渠", layout="wide")
 st.markdown(
@@ -327,10 +333,31 @@ st.markdown(
         border-radius: 16px;
         box-shadow: inset 0 1px 0 rgba(255,255,255,.84);
     }
+    [data-testid="stFileUploaderDropzone"] {
+        position: relative !important;
+    }
+    [data-testid="stFileUploaderDropzone"] input[type="file"] {
+        position: absolute !important;
+        inset: 0 !important;
+        width: 100% !important;
+        height: 100% !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: 0 !important;
+        opacity: 0 !important;
+        clip: auto !important;
+        clip-path: none !important;
+        overflow: visible !important;
+        white-space: normal !important;
+        cursor: pointer !important;
+        pointer-events: auto !important;
+        z-index: 4 !important;
+    }
     [data-testid="stFileUploaderDropzone"] > span > button[data-testid="stBaseButton-secondary"] {
         display: grid !important;
         place-items: center !important;
         position: relative !important;
+        z-index: 2 !important;
         align-items: center !important;
         justify-content: center !important;
         text-align: center !important;
@@ -349,6 +376,7 @@ st.markdown(
         overflow: hidden !important;
         box-shadow: var(--sidebar-pill-shadow) !important;
         backdrop-filter: saturate(180%) blur(16px) !important;
+        pointer-events: none !important;
         transition: transform .16s ease, box-shadow .16s ease, filter .16s ease !important;
     }
     [data-testid="stFileUploaderDropzone"] > span > button[data-testid="stBaseButton-secondary"]:hover {
@@ -649,6 +677,94 @@ st.markdown(
     }
     .data-intake-subtitle.compact {
         margin-top: .5rem;
+    }
+    .upload-kind-heading {
+        min-height: 3.05rem;
+        margin: .04rem 0 .42rem;
+        padding: .64rem .78rem;
+        border-radius: 14px;
+        border: 1px solid rgba(210, 213, 219, .84);
+        background: rgba(255,255,255,.86);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.92);
+    }
+    .upload-kind-heading span {
+        display: block;
+        color: var(--ink) !important;
+        font-size: .9rem;
+        font-weight: 880;
+        line-height: 1.1;
+    }
+    .upload-kind-heading small {
+        display: block;
+        color: var(--muted) !important;
+        font-size: .72rem;
+        font-weight: 650;
+        line-height: 1.35;
+        margin-top: .22rem;
+        overflow-wrap: anywhere;
+    }
+    .upload-kind-heading.sales {
+        border-color: rgba(0, 113, 227, .24);
+        background: linear-gradient(180deg, rgba(247,251,255,.96), rgba(255,255,255,.84));
+    }
+    .upload-kind-heading.purchase {
+        border-color: rgba(216, 145, 28, .28);
+        background: linear-gradient(180deg, rgba(255,250,241,.96), rgba(255,255,255,.84));
+    }
+    .saved-upload-summary {
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        flex-wrap: wrap;
+        gap: .42rem;
+        margin: .72rem 0 .46rem;
+        color: var(--muted);
+        font-size: .76rem;
+    }
+    .saved-upload-summary span,
+    .saved-upload-summary strong {
+        display: inline-flex;
+        align-items: center;
+        min-height: 1.82rem;
+        padding: .26rem .58rem;
+        border-radius: 999px;
+        border: 1px solid rgba(210, 213, 219, .82);
+        background: rgba(255,255,255,.78);
+        white-space: nowrap;
+    }
+    .saved-upload-summary strong {
+        color: var(--ink);
+        font-weight: 820;
+    }
+    .saved-file-list {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: .48rem;
+        margin-bottom: .55rem;
+    }
+    .saved-file-line {
+        min-width: 0;
+        padding: .46rem .52rem;
+        border: 1px solid rgba(210, 213, 219, .88);
+        border-radius: 10px;
+        background: rgba(255,255,255,.92);
+        box-shadow: inset 0 1px 0 rgba(255,255,255,.9);
+        min-height: 3.05rem;
+        display: flex;
+        align-items: center;
+        gap: .58rem;
+        overflow: hidden;
+    }
+    .saved-file-more {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 3.05rem;
+        border: 1px dashed rgba(184, 169, 255, .72);
+        border-radius: 10px;
+        color: var(--muted);
+        font-size: .78rem;
+        background: rgba(255,255,255,.56);
     }
     .data-intake-empty {
         min-height: 3.8rem;
@@ -1571,6 +1687,7 @@ st.markdown(
         font-weight: 850;
         line-height: 1;
         white-space: nowrap;
+        pointer-events: none;
     }
     h2, h3 { color: var(--ink); letter-spacing: -.02em; }
     h2 { font-size: 1.12rem !important; }
@@ -1721,6 +1838,13 @@ st.markdown(
         .trend-summary-grid {
             grid-template-columns: 1fr !important;
         }
+        .saved-file-list {
+            grid-template-columns: 1fr 1fr !important;
+        }
+        .upload-kind-heading {
+            min-height: auto !important;
+            padding: .58rem .66rem !important;
+        }
         .pipeline-grid {
             grid-template-columns: 1fr 1fr !important;
             gap: .55rem !important;
@@ -1817,6 +1941,9 @@ st.markdown(
         .hero h1 { font-size: 1.12rem !important; }
         .diagnostic-summary { font-size: .74rem !important; }
         [data-testid="stSidebar"] .stCaption { font-size: .68rem !important; }
+        .saved-file-list {
+            grid-template-columns: 1fr !important;
+        }
         .saved-file-chip {
             padding: .42rem .5rem !important;
             min-height: 2.9rem !important;
@@ -2010,6 +2137,15 @@ def _reset_upload_widget() -> None:
     st.session_state["upload_nonce"] = int(st.session_state.get("upload_nonce", 0)) + 1
 
 
+def _upload_kind(value: object) -> str:
+    kind = str(value or "auto")
+    return kind if kind in UPLOAD_KIND_LABELS else "auto"
+
+
+def _upload_kind_label(value: object) -> str:
+    return UPLOAD_KIND_LABELS[_upload_kind(value)]
+
+
 def _migrate_legacy_uploads_for_user(user: AuthUser) -> None:
     session_key = f"legacy_uploads_migrated_{user.id}"
     if st.session_state.get(session_key):
@@ -2033,7 +2169,13 @@ def _migrate_legacy_uploads_for_user(user: AuthUser) -> None:
         target = target_dir / f"{digest}_{_safe_upload_filename(str(record.get('name', path.name)))}"
         if not target.exists():
             target.write_bytes(content)
-        store.add_upload(user.id, str(record.get("name", path.name)), str(target), int(record.get("size") or target.stat().st_size))
+        store.add_upload(
+            user.id,
+            str(record.get("name", path.name)),
+            str(target),
+            int(record.get("size") or target.stat().st_size),
+            upload_kind="auto",
+        )
     st.session_state[session_key] = True
 
 
@@ -2051,7 +2193,7 @@ def _load_guest_uploads() -> list[dict[str, object]]:
             and _is_safe_upload_path(path, guest_session_id=guest_id)
             and _upload_validation_error(name, size) is None
         ):
-            valid.append(record)
+            valid.append({**record, "upload_kind": _upload_kind(record.get("upload_kind"))})
     st.session_state["guest_upload_records"] = valid
     return valid
 
@@ -2073,17 +2215,24 @@ def _load_saved_uploads(user: AuthUser | None) -> list[dict[str, object]]:
             and _is_safe_upload_path(path, user.id)
             and _upload_validation_error(name, size) is None
         ):
-            valid.append(record)
+            valid.append({**record, "upload_kind": _upload_kind(record.get("upload_kind"))})
         else:
             store.delete_upload(str(record.get("id", "")), user.id, is_admin=user.is_admin)
     return valid
 
 
-def _persist_uploads(uploaded_files: list[object] | None, user: AuthUser | None) -> tuple[list[dict[str, object]], list[str]]:
+def _persist_uploads(
+    uploaded_files: list[object] | None,
+    user: AuthUser | None,
+    upload_kind: str,
+) -> tuple[list[dict[str, object]], list[str], bool, int]:
     store = get_auth_store() if user is not None else None
     records = _load_saved_uploads(user)
     seen = {str(record.get("name")) + ":" + str(record.get("size")) for record in records}
     errors: list[str] = []
+    processed = bool(uploaded_files)
+    saved_count = 0
+    clean_kind = _upload_kind(upload_kind)
     for uploaded in uploaded_files or []:
         content = uploaded.getvalue()
         original_name = str(uploaded.name)
@@ -2105,7 +2254,7 @@ def _persist_uploads(uploaded_files: list[object] | None, user: AuthUser | None)
             counter += 1
         target.write_bytes(content)
         if user is not None and store is not None:
-            records.append(store.add_upload(user.id, original_name, str(target), len(content)))
+            records.append(store.add_upload(user.id, original_name, str(target), len(content), upload_kind=clean_kind))
         else:
             records.append({
                 "id": secrets.token_hex(16),
@@ -2113,11 +2262,13 @@ def _persist_uploads(uploaded_files: list[object] | None, user: AuthUser | None)
                 "name": original_name,
                 "path": str(target),
                 "size": len(content),
+                "upload_kind": clean_kind,
                 "created_at": "",
             })
             st.session_state["guest_upload_records"] = records
         seen.add(identity)
-    return _load_saved_uploads(user), errors
+        saved_count += 1
+    return _load_saved_uploads(user), errors, processed, saved_count
 
 
 def _delete_saved_upload(upload_id: str, user: AuthUser | None) -> bool:
@@ -2208,7 +2359,7 @@ def _promote_guest_uploads_to_user(user: AuthUser) -> None:
             target = target_dir / f"{digest}_{counter}_{_safe_upload_filename(name)}"
             counter += 1
         target.write_bytes(content)
-        store.add_upload(user.id, name, str(target), len(content))
+        store.add_upload(user.id, name, str(target), len(content), upload_kind=_upload_kind(record.get("upload_kind")))
         existing.add(identity)
     _clear_saved_uploads(None)
 
@@ -2233,8 +2384,8 @@ def _file_type_label(name: object) -> str:
     return "FILE"
 
 
-def _saved_file_refs(saved_uploads: list[dict[str, object]]) -> tuple[tuple[str, str, str, int, int], ...]:
-    refs: list[tuple[str, str, str, int, int]] = []
+def _saved_file_refs(saved_uploads: list[dict[str, object]]) -> tuple[tuple[str, str, str, int, int, str], ...]:
+    refs: list[tuple[str, str, str, int, int, str]] = []
     for record in saved_uploads:
         path = Path(str(record.get("path", "")))
         if not path.exists() or not path.is_file():
@@ -2246,55 +2397,182 @@ def _saved_file_refs(saved_uploads: list[dict[str, object]]) -> tuple[tuple[str,
             str(path),
             int(stat.st_size),
             int(stat.st_mtime_ns),
+            _upload_kind(record.get("upload_kind")),
         ))
     return tuple(refs)
 
 
 @st.cache_data(show_spinner=False)
+def _load_normalized_file(
+    file_id: str,
+    filename: str,
+    path_str: str,
+    size: int,
+    mtime_ns: int,
+    upload_kind: str,
+) -> tuple[pd.DataFrame, dict[str, object] | None, str | None]:
+    del file_id, size, mtime_ns
+    file_path = Path(path_str)
+    try:
+        raw = read_sales_file(file_path)
+        profile = profile_file(raw, filename)
+        profile = {**profile, "upload_kind": _upload_kind(upload_kind), "upload_label": _upload_kind_label(upload_kind)}
+        data_type = str(profile["data_type"])
+        if _upload_kind(upload_kind) == "purchase":
+            data_type = "采购"
+            profile["data_type"] = "采购"
+        normalized = normalize_sales_data(
+            raw,
+            default_channel=str(profile["channel"]).strip() or Path(filename).stem,
+            mapping=profile["mapping"],
+            source_file=filename,
+            data_type=data_type,
+        )
+        return normalized, profile, None
+    except Exception as exc:
+        return pd.DataFrame(), None, f"{filename} 读取失败：{exc}"
+
+
+@st.cache_data(show_spinner=False)
 def _load_channel_dataset(
-    file_refs: tuple[tuple[str, str, str, int, int], ...],
+    file_refs: tuple[tuple[str, str, str, int, int, str], ...],
     use_sample: bool,
 ) -> tuple[pd.DataFrame, list[dict[str, object]], list[str], str | None]:
-    loaded_files: list[dict[str, object]] = []
+    normalized_frames: list[pd.DataFrame] = []
     profiles: list[dict[str, object]] = []
     errors: list[str] = []
 
     if file_refs:
-        for _, filename, path_str, _, _ in file_refs:
-            file_path = Path(path_str)
-            try:
-                raw = read_sales_file(file_path)
-                profile = profile_file(raw, filename)
-                loaded_files.append({
-                    "frame": raw,
-                    "channel": str(profile["channel"]).strip() or Path(filename).stem,
-                    "data_type": str(profile["data_type"]),
-                    "mapping": profile["mapping"],
-                    "source_file": filename,
-                })
+        for file_id, filename, path_str, size, mtime_ns, upload_kind in file_refs:
+            normalized, profile, error = _load_normalized_file(file_id, filename, path_str, size, mtime_ns, upload_kind)
+            if error:
+                errors.append(error)
+                continue
+            normalized_frames.append(normalized)
+            if profile is not None:
                 profiles.append(profile)
-            except Exception as exc:
-                errors.append(f"{filename} 读取失败：{exc}")
     elif use_sample:
         for path in sorted((ROOT / "data" / "sample").glob("*.csv")):
-            raw = read_sales_file(path)
-            profile = profile_file(raw, path.name)
-            loaded_files.append({
-                "frame": raw,
-                "channel": path.stem,
-                "data_type": "销售库存",
-                "mapping": profile["mapping"],
-                "source_file": path.name,
-            })
-            profiles.append({**profile, "channel": path.stem, "data_type": "销售库存"})
+            stat = path.stat()
+            normalized, profile, error = _load_normalized_file(
+                f"sample:{path.name}",
+                path.name,
+                str(path),
+                int(stat.st_size),
+                int(stat.st_mtime_ns),
+                "sales",
+            )
+            if error:
+                errors.append(error)
+                continue
+            normalized_frames.append(normalized)
+            if profile is not None:
+                profiles.append({**profile, "channel": path.stem, "data_type": "销售库存"})
 
-    if not loaded_files:
+    if not normalized_frames:
         return pd.DataFrame(), profiles, errors, None
     try:
-        data = combine_sales_files(loaded_files)
+        data = combine_normalized_frames(normalized_frames)
     except ValueError as exc:
         return pd.DataFrame(), profiles, errors, str(exc)
     return data, profiles, errors, None
+
+
+def _handle_uploads(
+    uploaded_files: list[object] | None,
+    user: AuthUser | None,
+    upload_kind: str,
+) -> list[dict[str, object]]:
+    saved_uploads, upload_errors, processed, saved_count = _persist_uploads(uploaded_files, user, upload_kind)
+    if not processed:
+        return saved_uploads
+    messages: list[tuple[str, str]] = []
+    if saved_count:
+        st.session_state["use_sample_data"] = False
+        messages.append(("success", f"已保存 {saved_count} 个{_upload_kind_label(upload_kind)}文件，正在刷新分析结果。"))
+    messages.extend(("warning", message) for message in upload_errors)
+    st.session_state["upload_flash_messages"] = messages
+    _reset_upload_widget()
+    st.rerun()
+    return saved_uploads
+
+
+def _render_upload_flash_messages() -> None:
+    messages = st.session_state.pop("upload_flash_messages", [])
+    for level, message in messages if isinstance(messages, list) else []:
+        if level == "success":
+            st.success(str(message))
+        elif level == "info":
+            st.info(str(message))
+        else:
+            st.warning(str(message))
+
+
+def _render_saved_upload_manager(saved_uploads: list[dict[str, object]], user: AuthUser | None) -> None:
+    if not saved_uploads:
+        empty_note = "暂无保存文件，上传后会保存在账号下。" if user is not None else "暂无临时文件，游客上传不会长期保留。"
+        st.markdown(f"<div class='data-intake-empty'>{html.escape(empty_note)}</div>", unsafe_allow_html=True)
+        return
+
+    sales_count = sum(_upload_kind(record.get("upload_kind")) == "sales" for record in saved_uploads)
+    purchase_count = sum(_upload_kind(record.get("upload_kind")) == "purchase" for record in saved_uploads)
+    auto_count = len(saved_uploads) - sales_count - purchase_count
+    total_size = sum(int(record.get("size") or 0) for record in saved_uploads)
+    st.markdown(
+        f"""
+        <div class="saved-upload-summary">
+          <span>销售 {sales_count}</span>
+          <span>采购 {purchase_count}</span>
+          <span>自动识别 {auto_count}</span>
+          <strong>{len(saved_uploads)} 个文件 · {_format_bytes(total_size)}</strong>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
+
+    preview_records = saved_uploads[:8]
+    rows = []
+    for record in preview_records:
+        filename = str(record.get("name", "未命名文件"))
+        rows.append(
+            "<div class='saved-file-line'>"
+            f"<span class='saved-file-icon'>{html.escape(_file_type_label(filename))}</span>"
+            "<span class='saved-file-meta'>"
+            f"<span class='saved-file-name'>{html.escape(filename)}</span>"
+            f"<span class='saved-file-size'>{html.escape(_upload_kind_label(record.get('upload_kind')))} · {_format_bytes(record.get('size'))}</span>"
+            "</span>"
+            "</div>"
+        )
+    remainder = len(saved_uploads) - len(preview_records)
+    more_note = f"<div class='saved-file-more'>另有 {remainder} 个文件在管理区中</div>" if remainder > 0 else ""
+    st.markdown(f"<div class='saved-file-list'>{''.join(rows)}{more_note}</div>", unsafe_allow_html=True)
+
+    options = [str(record.get("id")) for record in saved_uploads]
+    labels = {
+        str(record.get("id")): f"{_upload_kind_label(record.get('upload_kind'))} · {record.get('name')} · {_format_bytes(record.get('size'))}"
+        for record in saved_uploads
+    }
+    with st.expander("管理已保存文件", expanded=False):
+        table = pd.DataFrame([
+            {
+                "类型": _upload_kind_label(record.get("upload_kind")),
+                "文件名": record.get("name"),
+                "大小": _format_bytes(record.get("size")),
+                "上传时间": record.get("created_at") or "当前会话",
+            }
+            for record in saved_uploads
+        ])
+        st.dataframe(table, width="stretch", hide_index=True, height=min(360, 42 + 36 * max(len(table), 1)))
+        selected_id = st.selectbox(
+            "选择要删除的文件",
+            options,
+            format_func=lambda value: labels.get(str(value), str(value)),
+            key="delete-upload-select",
+        )
+        if st.button("删除所选文件", type="secondary", width="stretch"):
+            if _delete_saved_upload(str(selected_id), user):
+                _reset_upload_widget()
+            st.rerun()
 
 
 def render_data_intake_panel(saved_uploads: list[dict[str, object]], user: AuthUser | None) -> tuple[list[dict[str, object]], bool]:
@@ -2324,19 +2602,34 @@ def render_data_intake_panel(saved_uploads: list[dict[str, object]], user: AuthU
     )
     if "upload_nonce" not in st.session_state:
         st.session_state["upload_nonce"] = 0
-    controls_left, controls_right = st.columns([1.45, .75], gap="large", vertical_alignment="top")
-    with controls_left:
-        st.markdown("<div class='data-intake-subtitle'>上传 Excel / CSV</div>", unsafe_allow_html=True)
-        uploads = st.file_uploader(
-            "上传 Excel / CSV",
+    _render_upload_flash_messages()
+    upload_sales, upload_purchase, controls_right = st.columns([1, 1, .72], gap="large", vertical_alignment="top")
+    with upload_sales:
+        st.markdown(
+            "<div class='upload-kind-heading sales'><span>销售数据</span><small>销量、销售额、库存日报 / 周报 / 月报</small></div>",
+            unsafe_allow_html=True,
+        )
+        sales_uploads = st.file_uploader(
+            "上传销售数据 Excel / CSV",
             type=["csv", "xlsx", "xls"],
             accept_multiple_files=True,
-            key=f"uploaded-files-{st.session_state['upload_nonce']}",
+            key=f"sales-uploaded-files-{st.session_state['upload_nonce']}",
             label_visibility="collapsed",
         )
-        saved_uploads, upload_errors = _persist_uploads(uploads, user)
-        for upload_error in upload_errors:
-            st.warning(upload_error)
+        saved_uploads = _handle_uploads(sales_uploads, user, "sales")
+    with upload_purchase:
+        st.markdown(
+            "<div class='upload-kind-heading purchase'><span>采购数据</span><small>采购单、到货、订购数量文件</small></div>",
+            unsafe_allow_html=True,
+        )
+        purchase_uploads = st.file_uploader(
+            "上传采购数据 Excel / CSV",
+            type=["csv", "xlsx", "xls"],
+            accept_multiple_files=True,
+            key=f"purchase-uploaded-files-{st.session_state['upload_nonce']}",
+            label_visibility="collapsed",
+        )
+        saved_uploads = _handle_uploads(purchase_uploads, user, "purchase")
         if "use_sample_data" not in st.session_state:
             st.session_state["use_sample_data"] = not bool(saved_uploads)
     with controls_right:
@@ -2347,38 +2640,7 @@ def render_data_intake_panel(saved_uploads: list[dict[str, object]], user: AuthU
             _reset_upload_widget()
             st.rerun()
 
-    if saved_uploads:
-        for row_start in range(0, len(saved_uploads), 3):
-            row_records = saved_uploads[row_start : row_start + 3]
-            file_cards = st.columns(3, gap="small")
-            for card, record in zip(file_cards, row_records):
-                with card:
-                    file_col, delete_col = st.columns([6, .72], gap="small", vertical_alignment="center")
-                    with file_col:
-                        filename = str(record["name"])
-                        st.markdown(
-                            "<div class='saved-file-chip'>"
-                            f"<span class='saved-file-icon'>{html.escape(_file_type_label(filename))}</span>"
-                            "<span class='saved-file-meta'>"
-                            f"<span class='saved-file-name'>{html.escape(filename)}</span>"
-                            f"<span class='saved-file-size'>{_format_bytes(record.get('size'))}</span>"
-                            "</span>"
-                            "</div>",
-                            unsafe_allow_html=True,
-                        )
-                    with delete_col:
-                        if st.button(
-                            "−",
-                            key=f"delete-upload-{record.get('id')}",
-                            help=f"删除 {record['name']}",
-                            width="stretch",
-                        ):
-                            if _delete_saved_upload(str(record.get("id")), user):
-                                _reset_upload_widget()
-                            st.rerun()
-    else:
-        empty_note = "暂无保存文件，上传后会保存在账号下。" if user is not None else "暂无临时文件，游客上传不会长期保留。"
-        st.markdown(f"<div class='data-intake-empty'>{html.escape(empty_note)}</div>", unsafe_allow_html=True)
+    _render_saved_upload_manager(saved_uploads, user)
     return saved_uploads, bool(use_sample)
 
 
@@ -3370,6 +3632,7 @@ elif active_module == "数据质量":
     for profile in profiles:
         quality_rows.append({
             "文件": profile["filename"],
+            "上传入口": profile.get("upload_label", "自动识别"),
             "渠道": profile["channel"],
             "类型": profile["data_type"],
             "原始行数": profile["rows"],

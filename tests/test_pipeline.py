@@ -18,6 +18,7 @@ from retail_assistant.analytics import (
 )
 from retail_assistant.charts import choose_available_metric, horizontal_bar_chart, trend_chart
 from retail_assistant.normalize import (
+    combine_normalized_frames,
     combine_sales_files,
     infer_channel,
     infer_mapping,
@@ -204,6 +205,27 @@ def test_combine_removes_overlapping_business_rows_across_files():
     ])
 
     assert len(result) == 1
+    assert "移除了 1 条重复业务记录" in result.attrs["warnings"][-1]
+
+
+def test_combine_normalized_frames_matches_cross_file_dedupe_behavior():
+    raw = pd.DataFrame(
+        {
+            "日期": [20260610],
+            "商品ID": ["X1"],
+            "商品名称": ["小象商品"],
+            "城市": ["上海"],
+            "商品销售量": [9],
+            "商品销售额": [90],
+        }
+    )
+    first = normalize_sales_data(raw, default_channel="小象", source_file="周报.xlsx")
+    second = normalize_sales_data(raw, default_channel="小象", source_file="月报.xlsx")
+
+    result = combine_normalized_frames([first, second])
+
+    assert len(result) == 1
+    assert result["sales_qty"].sum() == 9
     assert "移除了 1 条重复业务记录" in result.attrs["warnings"][-1]
 
 

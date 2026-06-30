@@ -46,6 +46,18 @@ def test_uploads_are_isolated_by_user(tmp_path):
     assert [record["id"] for record in store.list_uploads(user.id)] == [user_upload["id"]]
 
 
+def test_upload_kind_is_persisted_and_invalid_values_fall_back_to_auto(tmp_path):
+    store = make_store(tmp_path)
+    user = store.register_user("kind@example.com", "strong-pass-1")
+
+    sales_upload = store.add_upload(user.id, "sales.xlsx", "/tmp/sales.xlsx", 10, upload_kind="sales")
+    auto_upload = store.add_upload(user.id, "unknown.xlsx", "/tmp/unknown.xlsx", 10, upload_kind="bad-kind")
+
+    rows = {record["id"]: record for record in store.list_uploads(user.id)}
+    assert rows[sales_upload["id"]]["upload_kind"] == "sales"
+    assert rows[auto_upload["id"]]["upload_kind"] == "auto"
+
+
 def test_admin_user_summary_includes_upload_counts(tmp_path):
     store = make_store(tmp_path)
     owner = store.register_user("owner@example.com", "strong-pass-1")

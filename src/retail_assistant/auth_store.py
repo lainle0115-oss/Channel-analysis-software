@@ -126,11 +126,13 @@ class AuthStore:
                     name TEXT NOT NULL,
                     path TEXT NOT NULL,
                     size INTEGER NOT NULL DEFAULT 0,
+                    upload_kind TEXT NOT NULL DEFAULT 'auto',
                     created_at TEXT NOT NULL,
                     FOREIGN KEY(user_id) REFERENCES users(id)
                 )
                 """,
             )
+            self._ensure_upload_kind_column(conn)
             self._execute(
                 conn,
                 """
@@ -147,6 +149,25 @@ class AuthStore:
             self._execute(conn, "CREATE INDEX IF NOT EXISTS idx_uploads_user_id ON uploads(user_id)")
             self._execute(conn, "CREATE INDEX IF NOT EXISTS idx_uploads_created_at ON uploads(created_at)")
             self._ensure_admin_from_env(conn)
+
+    def _ensure_upload_kind_column(self, conn: Any) -> None:
+        if self.backend == "postgres":
+            row = self._execute(
+                conn,
+                """
+                SELECT 1
+                FROM information_schema.columns
+                WHERE table_name = 'uploads' AND column_name = 'upload_kind'
+                """,
+            ).fetchone()
+            if row is None:
+                self._execute(conn, "ALTER TABLE uploads ADD COLUMN upload_kind TEXT NOT NULL DEFAULT 'auto'")
+            return
+
+        rows = self._execute(conn, "PRAGMA table_info(uploads)").fetchall()
+        columns = {str(row["name"]) for row in rows}
+        if "upload_kind" not in columns:
+            self._execute(conn, "ALTER TABLE uploads ADD COLUMN upload_kind TEXT NOT NULL DEFAULT 'auto'")
 
     def _row_to_user(self, row: Any | None) -> AuthUser | None:
         if row is None:
@@ -305,16 +326,25 @@ class AuthStore:
                 ).fetchall()
             return [dict(row) for row in rows]
 
-    def add_upload(self, user_id: str, name: str, path: str, size: int, upload_id: str | None = None) -> dict[str, Any]:
+    def add_upload(
+        self,
+        user_id: str,
+        name: str,
+        path: str,
+        size: int,
+        upload_id: str | None = None,
+        upload_kind: str = "auto",
+    ) -> dict[str, Any]:
         record_id = upload_id or secrets.token_hex(16)
+        clean_kind = upload_kind if upload_kind in {"sales", "purchase", "auto"} else "auto"
         with self.connect() as conn:
             self._execute(
                 conn,
                 f"""
-                INSERT INTO uploads (id, user_id, name, path, size, created_at)
-                VALUES ({self._placeholder()}, {self._placeholder()}, {self._placeholder()}, {self._placeholder()}, {self._placeholder()}, {self._placeholder()})
+                INSERT INTO uploads (id, user_id, name, path, size, upload_kind, created_at)
+                VALUES ({self._placeholder()}, {self._placeholder()}, {self._placeholder()}, {self._placeholder()}, {self._placeholder()}, {self._placeholder()}, {self._placeholder()})
                 """,
-                (record_id, user_id, name, path, int(size), utc_now()),
+                (record_id, user_id, name, path, int(size), clean_kind, utc_now()),
             )
             row = self._execute(
                 conn,

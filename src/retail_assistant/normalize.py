@@ -420,21 +420,12 @@ def normalize_sales_data(
     return result
 
 
-def combine_sales_files(files: list[dict[str, object]]) -> pd.DataFrame:
-    frames: list[pd.DataFrame] = []
+def combine_normalized_frames(frames: list[pd.DataFrame]) -> pd.DataFrame:
     warnings: list[str] = []
-    for item in files:
-        normalized = normalize_sales_data(
-            item["frame"],
-            default_channel=str(item["channel"]),
-            mapping=item.get("mapping"),
-            source_file=str(item.get("source_file", "")),
-            data_type=str(item.get("data_type", "")) or None,
-        )
-        warnings.extend(normalized.attrs.get("warnings", []))
-        frames.append(normalized)
     if not frames:
         return pd.DataFrame(columns=CANONICAL_COLUMNS)
+    for frame in frames:
+        warnings.extend(frame.attrs.get("warnings", []))
     result = pd.concat(frames, ignore_index=True)
     business_columns = [
         "date", "channel", "data_type", "sku_id", "sku_name", "city", "store",
@@ -476,3 +467,17 @@ def combine_sales_files(files: list[dict[str, object]]) -> pd.DataFrame:
             )
     result.attrs["warnings"] = list(dict.fromkeys(warnings))
     return result
+
+
+def combine_sales_files(files: list[dict[str, object]]) -> pd.DataFrame:
+    frames: list[pd.DataFrame] = []
+    for item in files:
+        normalized = normalize_sales_data(
+            item["frame"],
+            default_channel=str(item["channel"]),
+            mapping=item.get("mapping"),
+            source_file=str(item.get("source_file", "")),
+            data_type=str(item.get("data_type", "")) or None,
+        )
+        frames.append(normalized)
+    return combine_normalized_frames(frames)
