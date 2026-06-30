@@ -2146,6 +2146,14 @@ def _upload_kind_label(value: object) -> str:
     return UPLOAD_KIND_LABELS[_upload_kind(value)]
 
 
+def _upload_record_identity(record: dict[str, object]) -> str:
+    path = Path(str(record.get("path", "")))
+    match = re.match(r"^([0-9a-f]{16})(?:_|$)", path.name)
+    if match:
+        return f"{_upload_kind(record.get('upload_kind'))}:{match.group(1)}"
+    return f"{_upload_kind(record.get('upload_kind'))}:{record.get('name')}:{record.get('size')}"
+
+
 def _migrate_legacy_uploads_for_user(user: AuthUser) -> None:
     session_key = f"legacy_uploads_migrated_{user.id}"
     if st.session_state.get(session_key):
@@ -2228,7 +2236,7 @@ def _persist_uploads(
 ) -> tuple[list[dict[str, object]], list[str], bool, int]:
     store = get_auth_store() if user is not None else None
     records = _load_saved_uploads(user)
-    seen = {str(record.get("name")) + ":" + str(record.get("size")) for record in records}
+    seen = {_upload_record_identity(record) for record in records}
     errors: list[str] = []
     processed = bool(uploaded_files)
     saved_count = 0
@@ -2241,7 +2249,7 @@ def _persist_uploads(
             errors.append(validation_error)
             continue
         digest = hashlib.sha256(content).hexdigest()[:16]
-        identity = f"{original_name}:{len(content)}"
+        identity = f"{clean_kind}:{digest}"
         if identity in seen:
             continue
         safe_name = _safe_upload_filename(original_name)
@@ -2334,23 +2342,23 @@ def _promote_guest_uploads_to_user(user: AuthUser) -> None:
         return
     store = get_auth_store()
     existing = {
-        str(record.get("name")) + ":" + str(record.get("size"))
+        _upload_record_identity(record)
         for record in store.list_uploads(user.id)
     }
     for record in guest_records:
         source = Path(str(record.get("path", "")))
         name = str(record.get("name", source.name))
-        size = int(record.get("size") or 0)
         if not source.exists() or not _is_safe_upload_path(source, guest_session_id=guest_id):
-            continue
-        identity = f"{name}:{size}"
-        if identity in existing:
             continue
         try:
             content = source.read_bytes()
         except OSError:
             continue
         digest = hashlib.sha256(content).hexdigest()[:16]
+        clean_kind = _upload_kind(record.get("upload_kind"))
+        identity = f"{clean_kind}:{digest}"
+        if identity in existing:
+            continue
         target_dir = _user_upload_dir(user.id)
         target_dir.mkdir(parents=True, exist_ok=True)
         target = target_dir / f"{digest}_{_safe_upload_filename(name)}"
@@ -2359,7 +2367,7 @@ def _promote_guest_uploads_to_user(user: AuthUser) -> None:
             target = target_dir / f"{digest}_{counter}_{_safe_upload_filename(name)}"
             counter += 1
         target.write_bytes(content)
-        store.add_upload(user.id, name, str(target), len(content), upload_kind=_upload_kind(record.get("upload_kind")))
+        store.add_upload(user.id, name, str(target), len(content), upload_kind=clean_kind)
         existing.add(identity)
     _clear_saved_uploads(None)
 
@@ -2478,19 +2486,45 @@ def _load_channel_dataset(
     return data, profiles, errors, None
 
 
-def _handle_uploads(
-    uploaded_files: list[object] | None,
+def _handle_upload_batches(
+    sales_uploads: list[object] | None,
+    purchase_uploads: list[object] | None,
     user: AuthUser | None,
-    upload_kind: str,
-) -> list[dict[str, object]]:
-    saved_uploads, upload_errors, processed, saved_count = _persist_uploads(uploaded_files, user, upload_kind)
-    if not processed:
-        return saved_uploads
+) -> list[dict[str, object]] | None:
+    batches = [
+        ("sales", sales_uploads),
+        ("purchase", purchase_uploads),
+    ]
+    if not any(files for _, files in batches):
+        return None
+
+    saved_uploads: list[dict[str, object]] | None = None
     messages: list[tuple[str, str]] = []
-    if saved_count:
+    saved_by_kind: dict[str, int] = {"sales": 0, "purchase": 0}
+    processed_any = False
+    for upload_kind, uploaded_files in batches:
+        next_saved, upload_errors, processed, saved_count = _persist_uploads(uploaded_files, user, upload_kind)
+        if processed:
+            processed_any = True
+        if saved_uploads is None or processed:
+            saved_uploads = next_saved
+        saved_by_kind[upload_kind] += saved_count
+        messages.extend(("warning", message) for message in upload_errors)
+
+    if not processed_any:
+        return saved_uploads
+
+    total_saved = sum(saved_by_kind.values())
+    if total_saved:
         st.session_state["use_sample_data"] = False
-        messages.append(("success", f"已保存 {saved_count} 个{_upload_kind_label(upload_kind)}文件，正在刷新分析结果。"))
-    messages.extend(("warning", message) for message in upload_errors)
+        pieces = [
+            f"{_upload_kind_label(kind)} {count} 个"
+            for kind, count in saved_by_kind.items()
+            if count
+        ]
+        messages.insert(0, ("success", f"已保存 {'、'.join(pieces)}，正在刷新分析结果。"))
+    elif not messages:
+        messages.append(("info", "这些文件已保存过，未重复添加。"))
     st.session_state["upload_flash_messages"] = messages
     _reset_upload_widget()
     st.rerun()
@@ -2616,7 +2650,6 @@ def render_data_intake_panel(saved_uploads: list[dict[str, object]], user: AuthU
             key=f"sales-uploaded-files-{st.session_state['upload_nonce']}",
             label_visibility="collapsed",
         )
-        saved_uploads = _handle_uploads(sales_uploads, user, "sales")
     with upload_purchase:
         st.markdown(
             "<div class='upload-kind-heading purchase'><span>采购数据</span><small>采购单、到货、订购数量文件</small></div>",
@@ -2629,9 +2662,13 @@ def render_data_intake_panel(saved_uploads: list[dict[str, object]], user: AuthU
             key=f"purchase-uploaded-files-{st.session_state['upload_nonce']}",
             label_visibility="collapsed",
         )
-        saved_uploads = _handle_uploads(purchase_uploads, user, "purchase")
-        if "use_sample_data" not in st.session_state:
-            st.session_state["use_sample_data"] = not bool(saved_uploads)
+
+    batch_saved_uploads = _handle_upload_batches(sales_uploads, purchase_uploads, user)
+    if batch_saved_uploads is not None:
+        saved_uploads = batch_saved_uploads
+
+    if "use_sample_data" not in st.session_state:
+        st.session_state["use_sample_data"] = not bool(saved_uploads)
     with controls_right:
         st.markdown("<div class='data-intake-subtitle'>数据模式</div>", unsafe_allow_html=True)
         use_sample = st.toggle("使用示例数据", key="use_sample_data")
