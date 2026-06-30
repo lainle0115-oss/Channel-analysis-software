@@ -157,6 +157,12 @@ def generate_management_summary(data: pd.DataFrame, anomalies: pd.DataFrame) -> 
     if data.empty:
         return "当前没有可分析的数据。"
     channels = channel_summary(data)
+    if kpis["sales_qty"] <= 0 and kpis["purchase_qty"] > 0:
+        return (
+            f"当前仅检测到采购数据，覆盖 {kpis['channel_count']} 个渠道、{kpis['sku_count']} 个 SKU，"
+            f"采购数量 {kpis['purchase_qty']:,.0f} 件。"
+            "请上传对应销售数据后，再查看销量、销售额、库存异常和采销比。"
+        )
     leading = channels.iloc[0]
     amount_channels = data.groupby("channel")["sales_amount"].apply(lambda values: values.abs().sum() > 0)
     amount_label = "销售额" if amount_channels.all() else "已提供渠道销售额"

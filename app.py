@@ -6,6 +6,7 @@ import os
 import re
 import secrets
 import sys
+from io import BytesIO
 
 import pandas as pd
 import streamlit as st
@@ -2146,6 +2147,16 @@ def _upload_kind_label(value: object) -> str:
     return UPLOAD_KIND_LABELS[_upload_kind(value)]
 
 
+def _upload_kind_profile_error(profile: dict[str, object], upload_kind: str, filename: str) -> str | None:
+    clean_kind = _upload_kind(upload_kind)
+    inferred_data_type = str(profile.get("data_type") or "未知")
+    if clean_kind == "purchase" and inferred_data_type != "采购":
+        return f"{filename} 看起来是{inferred_data_type}文件，不是采购文件；请从“销售数据”入口上传。"
+    if clean_kind == "sales" and inferred_data_type == "采购":
+        return f"{filename} 看起来是采购文件；请从“采购数据”入口上传。"
+    return None
+
+
 def _upload_record_identity(record: dict[str, object]) -> str:
     path = Path(str(record.get("path", "")))
     match = re.match(r"^([0-9a-f]{16})(?:_|$)", path.name)
@@ -2247,6 +2258,17 @@ def _persist_uploads(
         validation_error = _upload_validation_error(original_name, len(content))
         if validation_error:
             errors.append(validation_error)
+            continue
+        preview = BytesIO(content)
+        preview.name = original_name
+        try:
+            profile = profile_file(read_sales_file(preview), original_name)
+        except Exception as exc:
+            errors.append(f"{original_name} 读取失败：{exc}")
+            continue
+        kind_error = _upload_kind_profile_error(profile, clean_kind, original_name)
+        if kind_error:
+            errors.append(kind_error)
             continue
         digest = hashlib.sha256(content).hexdigest()[:16]
         identity = f"{clean_kind}:{digest}"
@@ -2424,9 +2446,14 @@ def _load_normalized_file(
     try:
         raw = read_sales_file(file_path)
         profile = profile_file(raw, filename)
-        profile = {**profile, "upload_kind": _upload_kind(upload_kind), "upload_label": _upload_kind_label(upload_kind)}
-        data_type = str(profile["data_type"])
-        if _upload_kind(upload_kind) == "purchase":
+        clean_kind = _upload_kind(upload_kind)
+        inferred_data_type = str(profile["data_type"])
+        kind_error = _upload_kind_profile_error(profile, clean_kind, filename)
+        if kind_error:
+            return pd.DataFrame(), None, kind_error
+        profile = {**profile, "upload_kind": clean_kind, "upload_label": _upload_kind_label(clean_kind)}
+        data_type = inferred_data_type
+        if clean_kind == "purchase":
             data_type = "采购"
             profile["data_type"] = "采购"
         normalized = normalize_sales_data(
@@ -3306,6 +3333,8 @@ if filtered.empty:
 kpis = calculate_kpis(filtered)
 anomalies = detect_anomalies(filtered)
 amount_channels, total_channels = amount_coverage(filtered)
+if kpis["sales_qty"] <= 0 and kpis["purchase_qty"] > 0:
+    st.warning("当前只检测到采购数据，尚未检测到有效销售数据。请继续上传对应销售文件，否则销量、销售额、库存异常和采销比会不完整。")
 
 issue_chips = "".join(
     f'<span class="diagnostic-chip">{html.escape(str(issue))} {count} 条</span>'

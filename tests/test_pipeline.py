@@ -743,6 +743,31 @@ def test_purchase_order_is_identified_and_kept_out_of_sales():
     assert result["sales_amount"].sum() == 0
 
 
+def test_purchase_only_summary_asks_for_sales_data():
+    data = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2026-06-10"]),
+            "channel": ["小象"],
+            "source_file": ["采购订单.xlsx"],
+            "data_type": ["采购"],
+            "sku_id": ["A1"],
+            "sku_name": ["无糖酸奶200g"],
+            "city": ["上海"],
+            "store": ["大仓"],
+            "sales_qty": [0],
+            "sales_amount": [0],
+            "purchase_qty": [120],
+            "stock_qty": [0],
+        }
+    )
+
+    summary = generate_management_summary(data, pd.DataFrame())
+
+    assert "当前仅检测到采购数据" in summary
+    assert "请上传对应销售数据" in summary
+    assert "销量最高" not in summary
+
+
 def test_grouped_header_purchase_excel_is_read_as_order_file(tmp_path):
     path = tmp_path / "xiaoxiang-purchase.xlsx"
     rows = [
