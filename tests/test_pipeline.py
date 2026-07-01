@@ -14,6 +14,7 @@ from retail_assistant.analytics import (
     detect_anomalies,
     generate_management_summary,
     latest_inventory_rows,
+    resolve_date_range,
     sku_summary,
 )
 from retail_assistant.charts import choose_available_metric, horizontal_bar_chart, trend_chart
@@ -301,6 +302,21 @@ def test_empty_sku_summary_keeps_sortable_schema():
     assert summary.sort_values("sales_qty").empty
 
 
+def test_resolve_date_range_accepts_streamlit_list_or_tuple_values():
+    default = ("2026-06-01", "2026-06-30")
+
+    assert resolve_date_range(["2026-06-08", "2026-06-10"], *default) == (
+        "2026-06-08",
+        "2026-06-10",
+    )
+    assert resolve_date_range(("2026-06-09", "2026-06-12"), *default) == (
+        "2026-06-09",
+        "2026-06-12",
+    )
+    assert resolve_date_range("2026-06-08", *default) == default
+    assert resolve_date_range(["2026-06-08"], *default) == default
+
+
 def test_daily_report_contains_channel_and_sku_sections():
     data = pd.DataFrame(
         {
@@ -545,6 +561,25 @@ def test_short_period_trend_chart_formats_date_axis_instead_of_timestamp_number(
     assert spec["encoding"]["x"]["axis"]["format"] == "%m-%d"
     assert spec["encoding"]["x"]["scale"]["paddingInner"] == pytest.approx(0.34)
     assert spec["encoding"]["xOffset"]["scale"]["paddingInner"] == pytest.approx(0.16)
+
+
+def test_trend_chart_cleans_invalid_dates_and_sets_temporal_domain():
+    data = pd.DataFrame(
+        {
+            "date": ["2026-06-08", "bad-date", "2026-06-10", "2026-06-12", "2026-06-14"],
+            "channel": ["小象", "小象", "小象", "盒马", "盒马"],
+            "purchase_qty": [5, 99, 7, 11, 13],
+        }
+    )
+
+    spec = trend_chart(data, "channel", "purchase_qty").to_dict()
+    dataset = next(iter(spec["datasets"].values()))
+    dates = {row["date"] for row in dataset}
+
+    assert "bad-date" not in dates
+    assert len(dataset) == 4
+    assert spec["encoding"]["x"]["scale"]["domain"][0].startswith("2026-06-08")
+    assert spec["encoding"]["x"]["scale"]["domain"][1].startswith("2026-06-14")
 
 
 def test_sku_trend_uses_vertical_bottom_legend_for_long_names():

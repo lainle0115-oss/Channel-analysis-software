@@ -20,6 +20,7 @@ from retail_assistant.analytics import (  # noqa: E402
     detect_anomalies,
     generate_management_summary,
     latest_inventory_rows,
+    resolve_date_range,
     sku_summary,
 )
 from retail_assistant.auth_store import AuthStore, AuthStoreError, AuthUser  # noqa: E402
@@ -3427,11 +3428,7 @@ if active_module == "经营总览":
             placeholder="选择一个或多个 SKU，左右图表将同步更新",
             key="overview-trend-skus",
         )
-    trend_start, trend_end = (
-        trend_dates
-        if isinstance(trend_dates, tuple) and len(trend_dates) == 2
-        else (trend_min_date, trend_max_date)
-    )
+    trend_start, trend_end = resolve_date_range(trend_dates, trend_min_date, trend_max_date)
     trend_filtered = filtered[filtered["date"].dt.date.between(trend_start, trend_end)].copy()
     if trend_sku_labels:
         trend_sku_ids = set(

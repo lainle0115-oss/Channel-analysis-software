@@ -35,18 +35,26 @@ def trend_chart(frame: pd.DataFrame, dimension: str, metric: str, height: int = 
         return None
     label = DIMENSION_LABELS[dimension]
     metric_label = METRIC_LABELS[metric]
+    clean = frame[["date", dimension, metric]].copy()
+    clean["date"] = pd.to_datetime(clean["date"], errors="coerce")
+    clean[metric] = pd.to_numeric(clean[metric], errors="coerce")
+    clean = clean.dropna(subset=["date", metric])
+    if clean.empty:
+        return None
     chart_data = (
-        frame.dropna(subset=["date"])
+        clean
         .groupby(["date", dimension], as_index=False)[metric]
         .sum()
         .rename(columns={dimension: label, metric: metric_label})
     )
     if chart_data.empty:
         return None
+    chart_data = chart_data.sort_values(["date", label])
 
     numeric_metric = pd.to_numeric(chart_data[metric_label], errors="coerce").fillna(0)
     domain_min = min(0.0, float(numeric_metric.min()) * 1.1)
     domain_max = max(1.0, float(numeric_metric.max()) * 1.1)
+    date_domain = [chart_data["date"].min(), chart_data["date"].max()]
     selection = alt.selection_point(fields=[label], bind="legend")
     legend = (
         alt.Legend(
@@ -98,7 +106,12 @@ def trend_chart(frame: pd.DataFrame, dimension: str, metric: str, height: int = 
         )
     else:
         chart = alt.Chart(chart_data).mark_line(point=alt.OverlayMarkDef(size=45), strokeWidth=2.2).encode(
-            x=alt.X("date:T", title=None, axis=alt.Axis(format="%m-%d", labelAngle=0)),
+            x=alt.X(
+                "date:T",
+                title=None,
+                axis=alt.Axis(format="%m-%d", labelAngle=0),
+                scale=alt.Scale(domain=date_domain),
+            ),
             **encoding,
         )
     return chart.add_params(selection).properties(height=height)

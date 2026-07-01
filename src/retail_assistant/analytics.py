@@ -1,6 +1,20 @@
 from __future__ import annotations
 
+from collections.abc import Sequence
+
 import pandas as pd
+
+
+def resolve_date_range(value: object, default_start: object, default_end: object) -> tuple[object, object]:
+    if (
+        isinstance(value, Sequence)
+        and not isinstance(value, (str, bytes))
+        and len(value) == 2
+        and value[0] is not None
+        and value[1] is not None
+    ):
+        return value[0], value[1]
+    return default_start, default_end
 
 
 def _with_purchase_column(data: pd.DataFrame) -> pd.DataFrame:
