@@ -659,6 +659,31 @@ st.markdown(
         font-size: .78rem;
         line-height: 1.55;
     }
+    .data-intake-snapshot {
+        display: flex;
+        flex-wrap: wrap;
+        gap: .4rem;
+        margin-top: .62rem;
+    }
+    .data-intake-snapshot span {
+        display: inline-flex;
+        align-items: baseline;
+        gap: .28rem;
+        min-height: 1.78rem;
+        padding: .26rem .54rem;
+        border-radius: 999px;
+        border: 1px solid rgba(210, 213, 219, .82);
+        background: rgba(255,255,255,.72);
+        color: var(--muted);
+        font-size: .72rem;
+        line-height: 1;
+        white-space: nowrap;
+    }
+    .data-intake-snapshot b {
+        color: var(--ink);
+        font-size: .78rem;
+        font-weight: 880;
+    }
     .data-intake-save-note {
         display: inline-flex;
         align-items: center;
@@ -1072,6 +1097,130 @@ st.markdown(
         border-left: 1px solid var(--line);
         font-size: .82rem;
         line-height: 1.55;
+    }
+    .command-panel {
+        display: grid;
+        grid-template-columns: minmax(320px, 1.24fr) minmax(420px, 1.8fr);
+        gap: .78rem;
+        align-items: stretch;
+        margin: .62rem 0 .78rem;
+    }
+    .command-narrative {
+        min-height: 132px;
+        padding: .95rem 1rem;
+        border-radius: 12px;
+        border: 1px solid rgba(205, 214, 229, .92);
+        background:
+            linear-gradient(180deg, rgba(255,255,255,.98), rgba(255,255,255,.9)),
+            #ffffff;
+        box-shadow: 0 10px 24px rgba(20, 24, 36, .06), inset 0 1px 0 rgba(255,255,255,.96);
+    }
+    .command-eyebrow {
+        color: #4f38e8;
+        font-size: .68rem;
+        font-weight: 900;
+        letter-spacing: .04em;
+        text-transform: uppercase;
+    }
+    .command-title {
+        margin-top: .18rem;
+        color: var(--ink);
+        font-size: 1.18rem;
+        line-height: 1.22;
+        font-weight: 920;
+        letter-spacing: -.025em;
+    }
+    .command-copy {
+        margin-top: .44rem;
+        color: var(--muted);
+        font-size: .78rem;
+        line-height: 1.52;
+    }
+    .command-status-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0, 1fr));
+        gap: .58rem;
+    }
+    .command-status {
+        min-height: 132px;
+        padding: .82rem .86rem;
+        border-radius: 12px;
+        border: 1px solid rgba(205, 214, 229, .86);
+        background:
+            radial-gradient(circle at 18% 0%, rgba(255,255,255,.8), transparent 42%),
+            linear-gradient(180deg, rgba(255,255,255,.96), rgba(248,250,252,.92));
+        box-shadow: 0 10px 22px rgba(20, 24, 36, .055), inset 0 1px 0 rgba(255,255,255,.96);
+    }
+    .command-status.good { border-color: rgba(32, 168, 132, .24); }
+    .command-status.warn { border-color: rgba(216, 145, 28, .28); }
+    .command-status.risk { border-color: rgba(200, 75, 75, .26); }
+    .command-status .label {
+        color: var(--muted);
+        font-size: .68rem;
+        font-weight: 820;
+    }
+    .command-status .value {
+        margin-top: .28rem;
+        color: var(--ink);
+        font-size: 1.12rem;
+        line-height: 1.14;
+        font-weight: 920;
+        letter-spacing: -.025em;
+        overflow-wrap: anywhere;
+    }
+    .command-status .hint {
+        margin-top: .42rem;
+        color: var(--muted);
+        font-size: .7rem;
+        line-height: 1.38;
+    }
+    .metric-wall {
+        display: grid;
+        grid-template-columns: repeat(7, minmax(0, 1fr));
+        gap: .58rem;
+        margin: .62rem 0 .78rem;
+    }
+    .metric-tile {
+        min-height: 112px;
+        padding: .72rem .78rem;
+        border-radius: 12px;
+        border: 1px solid rgba(205, 214, 229, .9);
+        background: #ffffff;
+        box-shadow: 0 10px 22px rgba(20, 24, 36, .052), inset 0 1px 0 rgba(255,255,255,.96);
+        position: relative;
+        overflow: hidden;
+    }
+    .metric-tile:before {
+        content: "";
+        position: absolute;
+        inset: 0 0 auto;
+        height: 3px;
+        background: linear-gradient(90deg, #0071e3, #20a884);
+        opacity: .78;
+    }
+    .metric-tile.amount:before { background: linear-gradient(90deg, #6558c7, #0071e3); }
+    .metric-tile.purchase:before { background: linear-gradient(90deg, #d8911c, #20a884); }
+    .metric-tile.risk:before { background: linear-gradient(90deg, #c84b4b, #d8911c); }
+    .metric-tile .label {
+        color: var(--muted);
+        font-size: .72rem;
+        font-weight: 820;
+        line-height: 1.25;
+    }
+    .metric-tile .value {
+        margin-top: .32rem;
+        color: var(--ink);
+        font-size: clamp(1.12rem, 1.6vw, 1.62rem);
+        font-weight: 940;
+        line-height: 1.08;
+        letter-spacing: -.035em;
+        overflow-wrap: anywhere;
+    }
+    .metric-tile .hint {
+        margin-top: .34rem;
+        color: var(--muted);
+        font-size: .68rem;
+        line-height: 1.36;
     }
     .diagnostic-panel {
         padding: .75rem .9rem;
@@ -1674,6 +1823,14 @@ st.markdown(
         line-height: 1.45;
     }
     [data-testid="stFileUploaderDropzone"] > span > button[data-testid="stBaseButton-secondary"] { font-size: 0 !important; }
+    [data-testid="stFileUploaderDropzone"] > span {
+        flex: 0 0 7.3rem !important;
+        min-width: 7.3rem !important;
+    }
+    [data-testid="stFileUploaderDropzone"] > span > button[data-testid="stBaseButton-secondary"] {
+        width: 7.3rem !important;
+        min-width: 7.3rem !important;
+    }
     [data-testid="stFileUploaderDropzone"] > span > button[data-testid="stBaseButton-secondary"]:after {
         content: "选择文件";
         position: absolute;
@@ -1716,10 +1873,12 @@ st.markdown(
         section[data-testid="stSidebar"][aria-expanded="false"],
         [data-testid="stSidebar"][aria-expanded="false"],
         section[data-testid="stSidebar"].stSidebar[aria-expanded="false"] {
-            transform: none !important;
-            translate: none !important;
+            transform: translateX(-100%) !important;
+            translate: -100% 0 !important;
             left: 0 !important;
             margin-left: 0 !important;
+            box-shadow: none !important;
+            pointer-events: none !important;
         }
         [data-testid="stSidebar"] { background-size: 100% 64px !important; }
         [data-testid="stSidebarContent"] {
@@ -1840,12 +1999,32 @@ st.markdown(
         .trend-summary-grid {
             grid-template-columns: 1fr !important;
         }
+        .command-panel {
+            grid-template-columns: 1fr !important;
+            gap: .55rem !important;
+        }
+        .command-status-grid {
+            grid-template-columns: 1fr 1fr !important;
+        }
+        .metric-wall {
+            grid-template-columns: 1fr 1fr !important;
+        }
         .saved-file-list {
             grid-template-columns: 1fr 1fr !important;
         }
         .upload-kind-heading {
             min-height: auto !important;
             padding: .58rem .66rem !important;
+        }
+        [data-testid="stFileUploaderDropzone"] {
+            align-items: center !important;
+            gap: .62rem !important;
+        }
+        [data-testid="stFileUploaderDropzone"] > span,
+        [data-testid="stFileUploaderDropzone"] > span > button[data-testid="stBaseButton-secondary"] {
+            flex-basis: 5.8rem !important;
+            min-width: 5.8rem !important;
+            width: 5.8rem !important;
         }
         .pipeline-grid {
             grid-template-columns: 1fr 1fr !important;
@@ -2638,6 +2817,11 @@ def _render_saved_upload_manager(saved_uploads: list[dict[str, object]], user: A
 
 
 def render_data_intake_panel(saved_uploads: list[dict[str, object]], user: AuthUser | None) -> tuple[list[dict[str, object]], bool]:
+    upload_kind_counts = {
+        key: sum(1 for record in saved_uploads if record.get("upload_kind") == key)
+        for key in ("sales", "purchase", "auto")
+    }
+    total_upload_size = sum(int(record.get("size") or 0) for record in saved_uploads)
     save_note = (
         f"已保存 {len(saved_uploads)} 个上传文件"
         if user is not None
@@ -2655,6 +2839,12 @@ def render_data_intake_panel(saved_uploads: list[dict[str, object]], user: AuthU
             <div>
               <div class="data-intake-title">数据接入</div>
               <div class="data-intake-meta">{html.escape(meta_note)}</div>
+              <div class="data-intake-snapshot">
+                <span><b>销售 {upload_kind_counts['sales']}</b> 个</span>
+                <span><b>采购 {upload_kind_counts['purchase']}</b> 个</span>
+                <span><b>自动识别 {upload_kind_counts['auto']}</b> 个</span>
+                <span><b>{html.escape(_format_bytes(total_upload_size))}</b></span>
+              </div>
             </div>
             <div class="data-intake-save-note">{html.escape(save_note)}</div>
           </div>
@@ -3337,6 +3527,60 @@ amount_channels, total_channels = amount_coverage(filtered)
 if kpis["sales_qty"] <= 0 and kpis["purchase_qty"] > 0:
     st.warning("当前只检测到采购数据，尚未检测到有效销售数据。请继续上传对应销售文件，否则销量、销售额、库存异常和采销比会不完整。")
 
+period_days = int(filtered["date"].dt.normalize().nunique())
+period_text = (
+    f"{filtered['date'].min():%Y/%m/%d} - {filtered['date'].max():%Y/%m/%d}"
+    if period_days > 1
+    else f"{filtered['date'].min():%Y/%m/%d}"
+)
+source_text = "示例数据" if use_sample else f"{len(saved_uploads)} 个上传文件"
+amount_coverage_text = f"{amount_channels}/{total_channels} 渠道"
+if kpis["sales_qty"] <= 0 and kpis["purchase_qty"] > 0:
+    next_action = "补齐销售数据"
+    next_action_hint = "采购量已入库，销售和库存异常暂不可完整判断"
+elif not anomalies.empty:
+    next_action = f"处理 {len(anomalies)} 条异常"
+    top_issue = str(anomalies["issue"].value_counts().index[0])
+    next_action_hint = f"优先查看 {top_issue}"
+else:
+    next_action = "监控趋势变化"
+    next_action_hint = "当前未识别高优先级异常"
+command_summary = generate_management_summary(filtered, anomalies)
+st.markdown(
+    f"""
+    <div class="command-panel">
+      <div class="command-narrative">
+        <div class="command-eyebrow">Operating Brief</div>
+        <div class="command-title">本期经营判断</div>
+        <div class="command-copy">{html.escape(command_summary)}</div>
+      </div>
+      <div class="command-status-grid">
+        <div class="command-status good">
+          <div class="label">覆盖周期</div>
+          <div class="value">{html.escape(period_text)}</div>
+          <div class="hint">{period_days} 个有效日期</div>
+        </div>
+        <div class="command-status">
+          <div class="label">数据来源</div>
+          <div class="value">{html.escape(source_text)}</div>
+          <div class="hint">{kpis['channel_count']} 个渠道 · {kpis['sku_count']} 个 SKU</div>
+        </div>
+        <div class="command-status {'good' if amount_channels == total_channels else 'warn'}">
+          <div class="label">金额口径</div>
+          <div class="value">{html.escape(amount_coverage_text)}</div>
+          <div class="hint">{'销售额可跨渠道比较' if amount_channels == total_channels else '部分渠道未提供销售额'}</div>
+        </div>
+        <div class="command-status {'risk' if not anomalies.empty else 'good'}">
+          <div class="label">下一动作</div>
+          <div class="value">{html.escape(next_action)}</div>
+          <div class="hint">{html.escape(next_action_hint)}</div>
+        </div>
+      </div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
 issue_chips = "".join(
     f'<span class="diagnostic-chip">{html.escape(str(issue))} {count} 条</span>'
     for issue, count in anomalies["issue"].value_counts().head(4).items()
@@ -3352,17 +3596,29 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-metric_columns = st.columns(7)
-metric_columns[0].metric("渠道数", kpis["channel_count"])
-metric_columns[1].metric("SKU 数", kpis["sku_count"])
-metric_columns[2].metric("商品销量", f"{kpis['sales_qty']:,.0f}")
-metric_columns[3].metric(
-    "销售额" if amount_channels == total_channels else "销售额（部分渠道）",
-    amount_display(filtered),
+metric_card_data = [
+    ("渠道数", f"{kpis['channel_count']}", "经营面覆盖", ""),
+    ("SKU 数", f"{kpis['sku_count']}", "已识别商品", ""),
+    ("商品销量", f"{kpis['sales_qty']:,.0f}", "件", ""),
+    (
+        "销售额" if amount_channels == total_channels else "销售额（部分渠道）",
+        amount_display(filtered),
+        "金额字段覆盖",
+        "amount",
+    ),
+    ("采购数量", f"{kpis['purchase_qty']:,.0f}", "件", "purchase"),
+    ("最新库存", f"{kpis['latest_stock']:,.0f}", "按渠道 SKU 最新快照", ""),
+    ("待跟进异常", f"{len(anomalies)}", "高优先级队列", "risk" if not anomalies.empty else ""),
+]
+metric_cards = "".join(
+    f'<div class="metric-tile {css_class}">'
+    f'<div class="label">{html.escape(label)}</div>'
+    f'<div class="value">{html.escape(value)}</div>'
+    f'<div class="hint">{html.escape(hint)}</div>'
+    "</div>"
+    for label, value, hint, css_class in metric_card_data
 )
-metric_columns[4].metric("采购数量", f"{kpis['purchase_qty']:,.0f}")
-metric_columns[5].metric("最新库存", f"{kpis['latest_stock']:,.0f}")
-metric_columns[6].metric("待跟进异常", len(anomalies))
+st.markdown(f'<div class="metric-wall">{metric_cards}</div>', unsafe_allow_html=True)
 
 if amount_channels < total_channels:
     missing_amount_channels = sorted(
